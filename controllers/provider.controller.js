@@ -1,6 +1,7 @@
 const db = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
 const { buildFileUrl } = require('../utils/helpers');
+const notificationService = require('../services/notification.service');
 
 /**
  * Get provider profile
@@ -165,6 +166,14 @@ async function respondToAppointment(req, res) {
       `UPDATE order_appointments SET status = 'CONFIRMED', responded_at = NOW(), response_note = ? WHERE id = ?`,
       [response_note || null, appointmentId]
     );
+
+    // Notify customer
+    notificationService.sendToUser(appointment.customer_id, {
+      title: 'Appointment Confirmed',
+      body: 'Your provider has confirmed the scheduled appointment.',
+      data: { type: 'appointment_confirmed', order_id: appointment.order_id },
+    });
+
     res.json({ message: 'Appointment confirmed' });
 
   } else if (action === 'reschedule') {
@@ -184,6 +193,13 @@ async function respondToAppointment(req, res) {
       [response_note || null, appointmentId]
     );
 
+    // Notify customer about reschedule
+    notificationService.sendToUser(appointment.customer_id, {
+      title: 'Reschedule Requested',
+      body: 'Your provider has proposed a new time for the appointment.',
+      data: { type: 'appointment_rescheduled', order_id: appointment.order_id },
+    });
+
     res.json({ message: 'Reschedule proposed' });
 
   } else if (action === 'decline') {
@@ -191,6 +207,25 @@ async function respondToAppointment(req, res) {
       `UPDATE order_appointments SET status = 'DECLINED', responded_at = NOW(), response_note = ? WHERE id = ?`,
       [response_note || null, appointmentId]
     );
+
+    // Reset order status to SEARCHING so the assignment engine can pick it up
+    await db.query(
+      `UPDATE service_orders SET provider_id = NULL, status = 'SEARCHING', assigned_at = NULL WHERE id = ?`,
+      [appointment.order_id]
+    );
+
+    // Deactivate existing conversation
+    await db.query(
+      `UPDATE order_conversations SET is_active = 0 WHERE order_id = ?`,
+      [appointment.order_id]
+    );
+
+    // Notify customer
+    notificationService.sendToUser(appointment.customer_id, {
+      title: 'Provider Reassignment',
+      body: 'Your provider could not take the scheduled appointment. We are finding a new one.',
+      data: { type: 'appointment_declined', order_id: appointment.order_id },
+    });
 
     // Trigger reassignment
     const assignmentService = require('../services/assignment.service');

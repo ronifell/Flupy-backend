@@ -34,6 +34,10 @@ setupSocketIO(io);
 
 // ── Middleware ───────────────────────────────────────────────
 app.use(cors());
+
+// Stripe webhook must receive raw body BEFORE express.json() parses it
+app.use('/api/membership/webhook', express.raw({ type: 'application/json' }));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -83,5 +87,11 @@ async function startServer() {
 }
 
 startServer();
+
+// ── Periodic Membership Expiry Check (every 6 hours) ────────
+const { checkExpiringMemberships } = require('./controllers/membership.controller');
+setInterval(() => {
+  checkExpiringMemberships(null, null);
+}, 6 * 60 * 60 * 1000);
 
 module.exports = { app, server, io };

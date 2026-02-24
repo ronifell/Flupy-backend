@@ -172,6 +172,8 @@ async function getOrderById(req, res) {
 
 /**
  * Provider accepts an assigned order
+ * (The assignment engine sets status=ASSIGNED; the provider "accepting"
+ *  explicitly confirms they will take the job.)
  */
 async function acceptOrder(req, res) {
   const orderId = req.params.id;
@@ -186,10 +188,13 @@ async function acceptOrder(req, res) {
     throw new AppError('Order not found or cannot be accepted', 404);
   }
 
-  await db.query(
-    `UPDATE service_orders SET status = 'ASSIGNED', assigned_at = NOW() WHERE id = ?`,
-    [orderId]
-  );
+  // Confirm assigned_at timestamp if not already set
+  if (!order.assigned_at) {
+    await db.query(
+      `UPDATE service_orders SET assigned_at = NOW() WHERE id = ?`,
+      [orderId]
+    );
+  }
 
   // Notify customer
   notificationService.sendToUser(order.customer_id, {
@@ -199,6 +204,56 @@ async function acceptOrder(req, res) {
   });
 
   res.json({ message: 'Order accepted' });
+}
+
+/**
+ * Provider declines an assigned order → triggers reassignment
+ */
+async function declineOrder(req, res) {
+  const orderId = req.params.id;
+  const providerId = req.user.id;
+
+  const [order] = await db.query(
+    'SELECT * FROM service_orders WHERE id = ? AND provider_id = ? AND status = ?',
+    [orderId, providerId, 'ASSIGNED']
+  );
+
+  if (!order) {
+    throw new AppError('Order not found or cannot be declined', 404);
+  }
+
+  // Reset order for reassignment
+  await db.query(
+    `UPDATE service_orders SET provider_id = NULL, status = 'SEARCHING', assigned_at = NULL WHERE id = ?`,
+    [orderId]
+  );
+
+  // Deactivate existing conversation
+  await db.query(
+    `UPDATE order_conversations SET is_active = 0 WHERE order_id = ?`,
+    [orderId]
+  );
+
+  // Record decline in assignment audit
+  await db.query(
+    `INSERT INTO order_assignment_attempts (order_id, attempt_number, search_radius_km, candidates_found, assigned_provider_id, result)
+     VALUES (?, (SELECT COALESCE(MAX(a2.attempt_number),0)+1 FROM order_assignment_attempts a2 WHERE a2.order_id = ?), 0, 0, ?, 'DECLINED')`,
+    [orderId, orderId, providerId]
+  );
+
+  // Notify customer
+  notificationService.sendToUser(order.customer_id, {
+    title: 'Provider Reassignment',
+    body: 'Your provider could not take the order. We are finding a new one.',
+    data: { type: 'provider_declined', order_id: orderId },
+  });
+
+  // Trigger reassignment
+  assignmentService.assignProvider(orderId).catch((err) => {
+    console.error(`Reassignment failed for order ${orderId}:`, err.message);
+  });
+
+  res.json({ message: 'Order declined, reassignment in progress' });
 }
 
 /**
@@ -338,6 +393,7 @@ module.exports = {
   getOrders,
   getOrderById,
   acceptOrder,
+  declineOrder,
   startOrder,
   completeOrder,
   cancelOrder,

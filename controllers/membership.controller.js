@@ -165,4 +165,64 @@ async function handleWebhook(req, res) {
   res.json({ received: true });
 }
 
-module.exports = { createCheckoutSession, getMembershipStatus, cancelMembership, handleWebhook };
+/**
+ * Check for expiring memberships and send reminder notifications
+ * Called periodically (e.g., via cron or a scheduled endpoint)
+ */
+async function checkExpiringMemberships(req, res) {
+  const notificationService = require('../services/notification.service');
+
+  try {
+    // Find memberships expiring within 3 days
+    const expiringSoon = await db.query(
+      `SELECT pp.user_id, u.full_name, pp.membership_expires_at
+       FROM provider_profiles pp
+       JOIN users u ON u.id = pp.user_id
+       WHERE pp.membership_status = 'active'
+         AND pp.membership_expires_at IS NOT NULL
+         AND pp.membership_expires_at <= DATE_ADD(NOW(), INTERVAL 3 DAY)
+         AND pp.membership_expires_at > NOW()`
+    );
+
+    for (const provider of expiringSoon) {
+      notificationService.sendToUser(provider.user_id, {
+        title: 'Membership Expiring Soon',
+        body: `Your membership expires on ${new Date(provider.membership_expires_at).toLocaleDateString()}. Renew to keep receiving orders.`,
+        data: { type: 'membership_expiring' },
+      });
+    }
+
+    // Find expired memberships that are still marked as active
+    const expired = await db.query(
+      `SELECT user_id FROM provider_profiles
+       WHERE membership_status = 'active'
+         AND membership_expires_at IS NOT NULL
+         AND membership_expires_at < NOW()`
+    );
+
+    for (const provider of expired) {
+      await db.query(
+        `UPDATE provider_profiles SET membership_status = 'canceled', is_available = 0 WHERE user_id = ?`,
+        [provider.user_id]
+      );
+      notificationService.sendToUser(provider.user_id, {
+        title: 'Membership Expired',
+        body: 'Your membership has expired. Renew to continue receiving orders.',
+        data: { type: 'membership_expired' },
+      });
+    }
+
+    if (res) {
+      res.json({
+        message: 'Membership check complete',
+        expiring_soon: expiringSoon.length,
+        expired: expired.length,
+      });
+    }
+  } catch (error) {
+    console.error('Membership check error:', error.message);
+    if (res) res.status(500).json({ error: 'Membership check failed' });
+  }
+}
+
+module.exports = { createCheckoutSession, getMembershipStatus, cancelMembership, handleWebhook, checkExpiringMemberships };
