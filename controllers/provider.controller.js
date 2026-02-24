@@ -97,13 +97,20 @@ async function updateLocation(req, res) {
   const userId = req.user.id;
   const { latitude, longitude } = req.body;
 
-  if (!latitude || !longitude) {
+  if (latitude == null || longitude == null || latitude === '' || longitude === '') {
     throw new AppError('Latitude and longitude are required', 400);
+  }
+
+  const lat = parseFloat(latitude);
+  const lng = parseFloat(longitude);
+
+  if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+    throw new AppError('Invalid latitude or longitude values', 400);
   }
 
   await db.query(
     'UPDATE provider_profiles SET current_lat = ?, current_lng = ?, location_updated_at = NOW() WHERE user_id = ?',
-    [latitude, longitude, userId]
+    [lat, lng, userId]
   );
 
   res.json({ message: 'Location updated' });
