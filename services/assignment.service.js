@@ -94,7 +94,7 @@ async function assignProvider(orderId) {
         `INSERT INTO order_assignment_candidates
           (attempt_id, provider_id, distance_km, rating, rating_count, rank_position, was_selected)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [attemptId, c.provider_id, c.distance_km, c.average_rating, c.total_ratings, i + 1, i === 0 ? 1 : 0]
+        [attemptId, c.provider_id, c.distance_km, c.average_rating || null, c.total_ratings || 0, i + 1, i === 0 ? 1 : 0]
       );
     }
 

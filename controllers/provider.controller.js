@@ -184,6 +184,10 @@ async function respondToAppointment(req, res) {
     res.json({ message: 'Appointment confirmed' });
 
   } else if (action === 'reschedule') {
+    if (!proposed_start || !proposed_end) {
+      throw new AppError('proposed_start and proposed_end are required for reschedule', 400);
+    }
+
     if (appointment.reschedule_count >= 3) {
       throw new AppError('Maximum reschedule attempts reached', 400);
     }

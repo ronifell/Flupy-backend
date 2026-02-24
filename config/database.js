@@ -16,9 +16,11 @@ const pool = mysql.createPool({
 
 /**
  * Execute a query with parameters
+ * Automatically converts undefined values to null to prevent mysql2 errors
  */
 async function query(sql, params = []) {
-  const [rows] = await pool.execute(sql, params);
+  const safeParams = params.map(p => (p === undefined ? null : p));
+  const [rows] = await pool.execute(sql, safeParams);
   return rows;
 }
 

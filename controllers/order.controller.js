@@ -23,7 +23,7 @@ async function createOrder(req, res) {
       `INSERT INTO service_orders
         (customer_id, service_id, description, order_mode, latitude, longitude, address_id, address_text, status)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'CREATED')`,
-      [customerId, service_id, description, order_mode, latitude, longitude, address_id || null, address_text || null]
+      [customerId, service_id || null, description || null, order_mode || 'ASAP', latitude || null, longitude || null, address_id || null, address_text || null]
     );
     const orderId = result.insertId;
 

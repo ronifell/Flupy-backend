@@ -106,7 +106,7 @@ async function sendMessage(req, res) {
   const result = await db.query(
     `INSERT INTO conversation_messages (conversation_id, sender_id, message_text)
      VALUES (?, ?, ?)`,
-    [conversationId, userId, message_text]
+    [conversationId, userId, message_text || '']
   );
 
   const messageId = result.insertId;

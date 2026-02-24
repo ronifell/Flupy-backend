@@ -30,7 +30,7 @@ async function addAddress(req, res) {
   const result = await db.query(
     `INSERT INTO user_addresses (user_id, label, address_line, city, state, zip_code, latitude, longitude, is_default)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [userId, label || null, address_line, city || null, state || null, zip_code || null, latitude, longitude, is_default ? 1 : 0]
+    [userId, label || null, address_line || null, city || null, state || null, zip_code || null, latitude || null, longitude || null, is_default ? 1 : 0]
   );
 
   res.status(201).json({ message: 'Address added', address_id: result.insertId });
@@ -62,14 +62,14 @@ async function updateAddress(req, res) {
      SET label = ?, address_line = ?, city = ?, state = ?, zip_code = ?, latitude = ?, longitude = ?, is_default = ?
      WHERE id = ?`,
     [
-      label || existing.label,
-      address_line || existing.address_line,
-      city || existing.city,
-      state || existing.state,
-      zip_code || existing.zip_code,
-      latitude || existing.latitude,
-      longitude || existing.longitude,
-      is_default ? 1 : existing.is_default,
+      label !== undefined ? label : existing.label,
+      address_line !== undefined ? address_line : existing.address_line,
+      city !== undefined ? city : existing.city,
+      state !== undefined ? state : existing.state,
+      zip_code !== undefined ? zip_code : existing.zip_code,
+      latitude !== undefined ? latitude : existing.latitude,
+      longitude !== undefined ? longitude : existing.longitude,
+      is_default !== undefined ? (is_default ? 1 : 0) : existing.is_default,
       addressId,
     ]
   );
