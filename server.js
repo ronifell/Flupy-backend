@@ -7,6 +7,7 @@ const { Server: SocketServer } = require('socket.io');
 const { testConnection } = require('./config/database');
 const { errorHandler } = require('./middleware/errorHandler');
 const { setupSocketIO } = require('./socket');
+const { initializeFirebase } = require('./config/firebase');
 
 // ── Import Routes ───────────────────────────────────────────
 const authRoutes = require('./routes/auth.routes');
@@ -77,6 +78,9 @@ async function startServer() {
   if (!dbReady) {
     console.warn('⚠️  Starting server without database connection');
   }
+
+  // Initialize Firebase for push notifications
+  initializeFirebase();
 
   server.listen(PORT, () => {
     console.log(`\n🚀 FLUPY API Server running on port ${PORT}`);
