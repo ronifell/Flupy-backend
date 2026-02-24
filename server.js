@@ -24,17 +24,43 @@ const app = express();
 const server = http.createServer(app);
 
 // ── Socket.IO ───────────────────────────────────────────────
+// Configure CORS based on environment
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim())
+  : (process.env.NODE_ENV === 'production' ? [] : '*');
+
 const io = new SocketServer(server, {
   cors: {
-    origin: '*',
+    origin: allowedOrigins,
     methods: ['GET', 'POST'],
+    credentials: true,
   },
 });
 
 setupSocketIO(io);
 
 // ── Middleware ───────────────────────────────────────────────
-app.use(cors());
+// CORS configuration for production
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, Postman, etc.)
+    if (!origin) return callback(null, true);
+    
+    if (process.env.NODE_ENV === 'production') {
+      if (allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    } else {
+      // Development: allow all origins
+      callback(null, true);
+    }
+  },
+  credentials: true,
+};
+
+app.use(cors(corsOptions));
 
 // Stripe webhook must receive raw body BEFORE express.json() parses it
 app.use('/api/membership/webhook', express.raw({ type: 'application/json' }));
@@ -82,11 +108,19 @@ async function startServer() {
   // Initialize Firebase for push notifications
   initializeFirebase();
 
-  server.listen(PORT, () => {
+  // Bind to all interfaces for VPS deployment
+  const HOST = process.env.HOST || '0.0.0.0';
+  
+  server.listen(PORT, HOST, () => {
+    const env = process.env.NODE_ENV || 'development';
+    const protocol = env === 'production' ? 'https' : 'http';
+    const domain = process.env.DOMAIN || `localhost:${PORT}`;
+    
     console.log(`\n🚀 FLUPY API Server running on port ${PORT}`);
-    console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`   API Base: http://localhost:${PORT}/api`);
-    console.log(`   Health:   http://localhost:${PORT}/api/health\n`);
+    console.log(`   Environment: ${env}`);
+    console.log(`   Host: ${HOST}`);
+    console.log(`   API Base: ${protocol}://${domain}/api`);
+    console.log(`   Health:   ${protocol}://${domain}/api/health\n`);
   });
 }
 
