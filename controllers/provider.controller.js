@@ -123,7 +123,17 @@ async function uploadDocument(req, res) {
   const userId = req.user.id;
   const { document_type } = req.body;
 
+  console.log(`[Upload Document] User ${userId} attempting to upload document`);
+  console.log(`[Upload Document] Request body:`, req.body);
+  console.log(`[Upload Document] File received:`, req.file ? {
+    filename: req.file.filename,
+    originalname: req.file.originalname,
+    mimetype: req.file.mimetype,
+    size: req.file.size
+  } : 'No file');
+
   if (!req.file) {
+    console.error(`[Upload Document] No file uploaded for user ${userId}`);
     throw new AppError('No file uploaded', 400);
   }
 
@@ -133,6 +143,7 @@ async function uploadDocument(req, res) {
   );
 
   if (!profile) {
+    console.error(`[Upload Document] Provider profile not found for user ${userId}`);
     throw new AppError('Provider profile not found', 404);
   }
 
@@ -143,6 +154,8 @@ async function uploadDocument(req, res) {
      VALUES (?, ?, ?)`,
     [profile.id, document_type || 'General', url]
   );
+
+  console.log(`[Upload Document] Document uploaded successfully for user ${userId}, document_id: ${profile.id}, url: ${url}`);
 
   res.json({ message: 'Document uploaded', document_url: url });
 }
@@ -276,7 +289,20 @@ async function getDashboard(req, res) {
     [userId]
   );
 
-  res.json({ stats, rating: rating || {}, profile: profile || {} });
+  // Check if provider has pending documents
+  const [documents] = await db.query(
+    `SELECT COUNT(*) as count FROM provider_documents pd
+     JOIN provider_profiles pp ON pp.id = pd.provider_id
+     WHERE pp.user_id = ? AND pd.status = 'pending'`,
+    [userId]
+  );
+
+  const profileData = profile || {};
+  // Convert count to number (MySQL returns COUNT as string or BigInt)
+  const pendingCount = Number(documents?.count || 0);
+  profileData.has_pending_documents = pendingCount > 0;
+
+  res.json({ stats, rating: rating || {}, profile: profileData });
 }
 
 module.exports = {
