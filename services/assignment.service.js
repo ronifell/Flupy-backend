@@ -26,6 +26,44 @@ async function assignProvider(orderId) {
     return null;
   }
 
+  console.log(`[Assignment] Starting assignment for order ${orderId}`);
+  console.log(`[Assignment] Order details:`, {
+    service_id: order.service_id,
+    latitude: order.latitude,
+    longitude: order.longitude,
+    customer_id: order.customer_id,
+  });
+
+  // Diagnostic: Check available providers (without distance/radius filter)
+  const [allProviders] = await db.query(
+    `SELECT 
+      pp.user_id,
+      pp.is_available,
+      pp.is_verified,
+      pp.membership_status,
+      pp.current_lat,
+      pp.current_lng,
+      pp.location_updated_at,
+      TIMESTAMPDIFF(MINUTE, pp.location_updated_at, NOW()) as minutes_since_location_update,
+      GROUP_CONCAT(ps.service_id) as offered_services
+    FROM provider_profiles pp
+    LEFT JOIN provider_services ps ON ps.provider_id = pp.id
+    WHERE pp.user_id != ?
+    GROUP BY pp.user_id`,
+    [order.customer_id]
+  );
+  
+  console.log(`[Assignment] All providers status:`, allProviders.map(p => ({
+    user_id: p.user_id,
+    is_available: p.is_available,
+    is_verified: p.is_verified,
+    membership_status: p.membership_status,
+    has_location: !!(p.current_lat && p.current_lng),
+    location_age_minutes: p.minutes_since_location_update,
+    offers_service: p.offered_services ? p.offered_services.split(',').includes(String(order.service_id)) : false,
+    offered_services: p.offered_services,
+  })));
+
   let attemptNumber = 0;
 
   for (const radiusKm of SEARCH_RADII_KM) {

@@ -119,6 +119,12 @@ async function handleWebhook(req, res) {
            WHERE user_id = ?`,
           [session.subscription, userId]
         );
+        
+        // Auto-set availability if provider is verified
+        const updateAvailability = require('./provider.controller').updateAvailabilityIfEligible;
+        if (updateAvailability) {
+          await updateAvailability(userId, true); // true = use user_id instead of provider_id
+        }
       }
       break;
     }
@@ -133,28 +139,62 @@ async function handleWebhook(req, res) {
          WHERE stripe_subscription_id = ?`,
         [periodEnd, subscriptionId]
       );
+      
+      // Auto-set availability if provider is verified
+      const [profiles] = await db.query(
+        'SELECT id FROM provider_profiles WHERE stripe_subscription_id = ?',
+        [subscriptionId]
+      );
+      if (profiles.length > 0) {
+        const updateAvailability = require('./provider.controller').updateAvailabilityIfEligible;
+        if (updateAvailability) {
+          await updateAvailability(profiles[0].id, false); // false = use provider_id
+        }
+      }
       break;
     }
 
     case 'invoice.payment_failed': {
       const invoice = event.data.object;
+      const [profiles] = await db.query(
+        'SELECT id FROM provider_profiles WHERE stripe_subscription_id = ?',
+        [invoice.subscription]
+      );
       await db.query(
         `UPDATE provider_profiles
          SET membership_status = 'past_due'
          WHERE stripe_subscription_id = ?`,
         [invoice.subscription]
       );
+      // Auto-set availability (will set to 0 if not eligible)
+      if (profiles.length > 0) {
+        const updateAvailability = require('./provider.controller').updateAvailabilityIfEligible;
+        if (updateAvailability) {
+          await updateAvailability(profiles[0].id, false);
+        }
+      }
       break;
     }
 
     case 'customer.subscription.deleted': {
       const subscription = event.data.object;
+      const [profiles] = await db.query(
+        'SELECT id FROM provider_profiles WHERE stripe_subscription_id = ?',
+        [subscription.id]
+      );
       await db.query(
         `UPDATE provider_profiles
          SET membership_status = 'canceled', stripe_subscription_id = NULL
          WHERE stripe_subscription_id = ?`,
         [subscription.id]
       );
+      // Auto-set availability (will set to 0 since membership is canceled)
+      if (profiles.length > 0) {
+        const updateAvailability = require('./provider.controller').updateAvailabilityIfEligible;
+        if (updateAvailability) {
+          await updateAvailability(profiles[0].id, false);
+        }
+      }
       break;
     }
 

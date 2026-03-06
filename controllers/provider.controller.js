@@ -4,6 +4,38 @@ const { buildFileUrl } = require('../utils/helpers');
 const notificationService = require('../services/notification.service');
 
 /**
+ * Helper function to automatically set is_available = 1 when provider is verified and has active membership
+ * Can accept either provider_id (from provider_profiles.id) or user_id
+ */
+async function updateAvailabilityIfEligible(providerIdOrUserId, useUserId = false) {
+  const query = useUserId
+    ? 'SELECT id, is_verified, membership_status, is_available FROM provider_profiles WHERE user_id = ?'
+    : 'SELECT id, is_verified, membership_status, is_available FROM provider_profiles WHERE id = ?';
+  
+  const [profile] = await db.query(query, [providerIdOrUserId]);
+
+  if (!profile) return;
+
+  const shouldBeAvailable = profile.is_verified === 1 && profile.membership_status === 'active';
+  
+  // Only update if status needs to change
+  if (shouldBeAvailable && profile.is_available === 0) {
+    await db.query(
+      'UPDATE provider_profiles SET is_available = 1 WHERE id = ?',
+      [profile.id]
+    );
+    console.log(`[Auto-Availability] Provider ${profile.id} automatically set to available (verified + active membership)`);
+  } else if (!shouldBeAvailable && profile.is_available === 1) {
+    // If they lose verification or membership, set to unavailable
+    await db.query(
+      'UPDATE provider_profiles SET is_available = 0 WHERE id = ?',
+      [profile.id]
+    );
+    console.log(`[Auto-Availability] Provider ${profile.id} automatically set to unavailable (missing verification or membership)`);
+  }
+}
+
+/**
  * Get provider profile
  */
 async function getProfile(req, res) {
@@ -149,15 +181,57 @@ async function uploadDocument(req, res) {
 
   const url = buildFileUrl(req, req.file.filename);
 
+  // Insert document
   await db.query(
     `INSERT INTO provider_documents (provider_id, document_type, document_url)
      VALUES (?, ?, ?)`,
     [profile.id, document_type || 'General', url]
   );
 
+  // Auto-approve and verify in development/testing mode
+  const isDevelopment = process.env.NODE_ENV !== 'production';
+  
+  if (isDevelopment) {
+    // Auto-approve the document
+    const [insertedDoc] = await db.query(
+      `SELECT id FROM provider_documents 
+       WHERE provider_id = ? AND document_url = ? 
+       ORDER BY id DESC LIMIT 1`,
+      [profile.id, url]
+    );
+    
+    if (insertedDoc && insertedDoc.id) {
+      await db.query(
+        `UPDATE provider_documents 
+         SET status = 'approved', reviewed_at = NOW() 
+         WHERE id = ?`,
+        [insertedDoc.id]
+      );
+      
+      // Auto-verify the provider
+      await db.query(
+        `UPDATE provider_profiles 
+         SET is_verified = 1 
+         WHERE id = ?`,
+        [profile.id]
+      );
+      
+      // Auto-set availability if provider has active membership
+      await updateAvailabilityIfEligible(profile.id);
+      
+      console.log(`[Upload Document] DEV MODE: Document auto-approved and provider ${userId} auto-verified`);
+    }
+  }
+
   console.log(`[Upload Document] Document uploaded successfully for user ${userId}, document_id: ${profile.id}, url: ${url}`);
 
-  res.json({ message: 'Document uploaded', document_url: url });
+  res.json({ 
+    message: isDevelopment 
+      ? 'Document uploaded and approved (dev mode)' 
+      : 'Document uploaded for verification',
+    document_url: url,
+    auto_verified: isDevelopment 
+  });
 }
 
 /**
@@ -305,6 +379,90 @@ async function getDashboard(req, res) {
   res.json({ stats, rating: rating || {}, profile: profileData });
 }
 
+/**
+ * Approve or reject provider verification document (Admin function)
+ * When a document is approved, automatically set provider as verified if they have at least one approved document
+ */
+async function reviewDocument(req, res) {
+  const documentId = req.params.id;
+  const { status } = req.body; // 'approved' or 'rejected'
+
+  if (!['approved', 'rejected'].includes(status)) {
+    throw new AppError('Status must be "approved" or "rejected"', 400);
+  }
+
+  // Get document with provider info
+  const [document] = await db.query(
+    `SELECT pd.*, pp.user_id, pp.id as provider_profile_id
+     FROM provider_documents pd
+     JOIN provider_profiles pp ON pp.id = pd.provider_id
+     WHERE pd.id = ?`,
+    [documentId]
+  );
+
+  if (!document) {
+    throw new AppError('Document not found', 404);
+  }
+
+  // Update document status
+  await db.query(
+    `UPDATE provider_documents 
+     SET status = ?, reviewed_at = NOW() 
+     WHERE id = ?`,
+    [status, documentId]
+  );
+
+  // If approved, check if provider should be verified
+  if (status === 'approved') {
+    // Check if provider has at least one approved document
+    const [approvedDocs] = await db.query(
+      `SELECT COUNT(*) as count 
+       FROM provider_documents 
+       WHERE provider_id = ? AND status = 'approved'`,
+      [document.provider_profile_id]
+    );
+
+    // Set provider as verified if they have at least one approved document
+    if (approvedDocs[0].count > 0) {
+      await db.query(
+        `UPDATE provider_profiles 
+         SET is_verified = 1 
+         WHERE id = ?`,
+        [document.provider_profile_id]
+      );
+      
+      // Auto-set availability if provider has active membership
+      await updateAvailabilityIfEligible(document.provider_profile_id);
+      
+      console.log(`[Review Document] Provider ${document.user_id} verified after document approval`);
+    }
+  } else {
+    // If rejected, check if provider still has any approved documents
+    const [approvedDocs] = await db.query(
+      `SELECT COUNT(*) as count 
+       FROM provider_documents 
+       WHERE provider_id = ? AND status = 'approved'`,
+      [document.provider_profile_id]
+    );
+
+    // Unverify provider if they have no approved documents
+    if (approvedDocs[0].count === 0) {
+      await db.query(
+        `UPDATE provider_profiles 
+         SET is_verified = 0 
+         WHERE id = ?`,
+        [document.provider_profile_id]
+      );
+      console.log(`[Review Document] Provider ${document.user_id} unverified - no approved documents`);
+    }
+  }
+
+  res.json({ 
+    message: `Document ${status}`,
+    provider_verified: status === 'approved' 
+  });
+}
+
 module.exports = {
   getProfile,
   updateProfile,
@@ -313,4 +471,6 @@ module.exports = {
   uploadDocument,
   respondToAppointment,
   getDashboard,
+  reviewDocument,
+  updateAvailabilityIfEligible, // Export helper for use in other controllers
 };

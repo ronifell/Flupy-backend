@@ -34,4 +34,8 @@ router.post(
   asyncHandler(providerController.respondToAppointment)
 );
 
+// Document review (Admin function - for testing, you can call this directly)
+// In production, this should be protected with admin authentication
+router.post('/documents/:id/review', asyncHandler(providerController.reviewDocument));
+
 module.exports = router;
