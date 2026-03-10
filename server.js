@@ -8,6 +8,7 @@ const { testConnection } = require('./config/database');
 const { errorHandler } = require('./middleware/errorHandler');
 const { setupSocketIO } = require('./socket');
 const { initializeFirebase } = require('./config/firebase');
+const { i18nMiddleware } = require('./i18n');
 
 // ── Import Routes ───────────────────────────────────────────
 const authRoutes = require('./routes/auth.routes');
@@ -61,6 +62,9 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
+
+// i18n middleware - must be before routes
+app.use(i18nMiddleware);
 
 // Stripe webhook must receive raw body BEFORE express.json() parses it
 app.use('/api/membership/webhook', express.raw({ type: 'application/json' }));

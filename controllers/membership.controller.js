@@ -1,6 +1,8 @@
 const stripe = require('../config/stripe');
 const db = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
+const { t } = require('../i18n');
+const notificationService = require('../services/notification.service');
 
 /**
  * Create a Stripe checkout session for provider membership
@@ -91,7 +93,8 @@ async function cancelMembership(req, res) {
     cancel_at_period_end: true,
   });
 
-  res.json({ message: 'Membership will be canceled at the end of the billing period' });
+  const language = req.language || 'en';
+  res.json({ message: t('messages.membershipCanceled', {}, language) });
 }
 
 /**
@@ -210,7 +213,6 @@ async function handleWebhook(req, res) {
  * Called periodically (e.g., via cron or a scheduled endpoint)
  */
 async function checkExpiringMemberships(req, res) {
-  const notificationService = require('../services/notification.service');
 
   try {
     // Find memberships expiring within 3 days
@@ -224,10 +226,15 @@ async function checkExpiringMemberships(req, res) {
          AND pp.membership_expires_at > NOW()`
     );
 
+    // Default to English for cron job notifications
+    // TODO: Get user's language preference from database
+    const defaultLang = 'en';
+    
     for (const provider of expiringSoon) {
+      const expiryDate = new Date(provider.membership_expires_at).toLocaleDateString();
       notificationService.sendToUser(provider.user_id, {
-        title: 'Membership Expiring Soon',
-        body: `Your membership expires on ${new Date(provider.membership_expires_at).toLocaleDateString()}. Renew to keep receiving orders.`,
+        title: t('notifications.membershipExpiringSoon.title', {}, defaultLang),
+        body: t('notifications.membershipExpiringSoon.body', { date: expiryDate }, defaultLang),
         data: { type: 'membership_expiring' },
       });
     }
@@ -245,16 +252,20 @@ async function checkExpiringMemberships(req, res) {
         `UPDATE provider_profiles SET membership_status = 'canceled', is_available = 0 WHERE user_id = ?`,
         [provider.user_id]
       );
+      // Default to English for cron job notifications
+      // TODO: Get user's language preference from database
+      const defaultLang = 'en';
       notificationService.sendToUser(provider.user_id, {
-        title: 'Membership Expired',
-        body: 'Your membership has expired. Renew to continue receiving orders.',
+        title: t('notifications.membershipExpired.title', {}, defaultLang),
+        body: t('notifications.membershipExpired.body', {}, defaultLang),
         data: { type: 'membership_expired' },
       });
     }
 
     if (res) {
+      const language = req.language || 'en';
       res.json({
-        message: 'Membership check complete',
+        message: t('messages.membershipCheckComplete', {}, language),
         expiring_soon: expiringSoon.length,
         expired: expired.length,
       });

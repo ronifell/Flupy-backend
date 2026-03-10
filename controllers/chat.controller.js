@@ -129,13 +129,15 @@ async function sendMessage(req, res) {
     ? conversation.provider_id
     : conversation.customer_id;
 
+  const language = req.language || 'en';
+  const { t } = require('../i18n');
   notificationService.sendToUser(recipientId, {
-    title: 'New Message',
-    body: message_text || 'Sent an attachment',
+    title: t('notifications.newMessage.title', {}, language),
+    body: message_text || t('notifications.newMessage.body', {}, language),
     data: { type: 'new_message', conversation_id: conversationId, order_id: conversation.order_id },
   });
 
-  res.status(201).json({ message: 'Message sent', message_id: messageId });
+  res.status(201).json({ message: t('messages.messageSent', {}, language), message_id: messageId });
 }
 
 module.exports = { getConversation, getMessages, sendMessage };

@@ -2,6 +2,7 @@ const db = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
 const { buildFileUrl } = require('../utils/helpers');
 const notificationService = require('../services/notification.service');
+const { t } = require('../i18n');
 
 /**
  * Helper function to automatically set is_available = 1 when provider is verified and has active membership
@@ -104,7 +105,8 @@ async function updateProfile(req, res) {
     }
   }
 
-  res.json({ message: 'Profile updated successfully' });
+  const language = req.language || 'en';
+  res.json({ message: t('messages.profileUpdatedProvider', {}, language) });
 }
 
 /**
@@ -119,7 +121,9 @@ async function toggleAvailability(req, res) {
     [is_available ? 1 : 0, userId]
   );
 
-  res.json({ message: `Availability set to ${is_available ? 'available' : 'unavailable'}` });
+  const language = req.language || 'en';
+  const status = is_available ? t('provider.available', {}, language) : t('provider.unavailable', {}, language);
+  res.json({ message: t('messages.availabilitySet', { status }, language) });
 }
 
 /**
@@ -145,7 +149,8 @@ async function updateLocation(req, res) {
     [lat, lng, userId]
   );
 
-  res.json({ message: 'Location updated' });
+  const language = req.language || 'en';
+  res.json({ message: t('messages.locationUpdated', {}, language) });
 }
 
 /**
@@ -262,13 +267,14 @@ async function respondToAppointment(req, res) {
     );
 
     // Notify customer
+    const language = req.language || 'en';
     notificationService.sendToUser(appointment.customer_id, {
-      title: 'Appointment Confirmed',
-      body: 'Your provider has confirmed the scheduled appointment.',
+      title: t('notifications.appointmentConfirmed.title', {}, language),
+      body: t('notifications.appointmentConfirmed.body', {}, language),
       data: { type: 'appointment_confirmed', order_id: appointment.order_id },
     });
 
-    res.json({ message: 'Appointment confirmed' });
+    res.json({ message: t('messages.appointmentConfirmed', {}, language) });
 
   } else if (action === 'reschedule') {
     if (!proposed_start || !proposed_end) {
@@ -292,13 +298,14 @@ async function respondToAppointment(req, res) {
     );
 
     // Notify customer about reschedule
+    const language = req.language || 'en';
     notificationService.sendToUser(appointment.customer_id, {
-      title: 'Reschedule Requested',
-      body: 'Your provider has proposed a new time for the appointment.',
+      title: t('notifications.rescheduleRequested.title', {}, language),
+      body: t('notifications.rescheduleRequested.body', {}, language),
       data: { type: 'appointment_rescheduled', order_id: appointment.order_id },
     });
 
-    res.json({ message: 'Reschedule proposed' });
+    res.json({ message: t('messages.rescheduleProposed', {}, language) });
 
   } else if (action === 'decline') {
     await db.query(
@@ -319,9 +326,10 @@ async function respondToAppointment(req, res) {
     );
 
     // Notify customer
+    const language = req.language || 'en';
     notificationService.sendToUser(appointment.customer_id, {
-      title: 'Provider Reassignment',
-      body: 'Your provider could not take the scheduled appointment. We are finding a new one.',
+      title: t('notifications.providerReassignmentAppointment.title', {}, language),
+      body: t('notifications.providerReassignmentAppointment.body', {}, language),
       data: { type: 'appointment_declined', order_id: appointment.order_id },
     });
 
@@ -331,7 +339,7 @@ async function respondToAppointment(req, res) {
       console.error(`Reassignment failed for order ${appointment.order_id}:`, err.message);
     });
 
-    res.json({ message: 'Appointment declined, reassignment triggered' });
+    res.json({ message: t('messages.appointmentDeclined', {}, language) });
   }
 }
 
@@ -457,8 +465,9 @@ async function reviewDocument(req, res) {
     }
   }
 
+  const language = req.language || 'en';
   res.json({ 
-    message: `Document ${status}`,
+    message: t('messages.documentStatus', { status }, language),
     provider_verified: status === 'approved' 
   });
 }

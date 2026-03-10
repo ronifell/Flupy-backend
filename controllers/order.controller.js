@@ -3,6 +3,7 @@ const { AppError } = require('../middleware/errorHandler');
 const assignmentService = require('../services/assignment.service');
 const notificationService = require('../services/notification.service');
 const { buildFileUrl, parsePagination } = require('../utils/helpers');
+const { t } = require('../i18n');
 
 /**
  * Create a new service order (Customer)
@@ -61,8 +62,9 @@ async function createOrder(req, res) {
       console.error(`Assignment failed for order ${orderId}:`, err.message);
     });
 
+    const language = req.language || 'en';
     res.status(201).json({
-      message: 'Order created successfully',
+      message: t('messages.orderCreated', {}, language),
       order_id: orderId,
       status: 'SEARCHING',
     });
@@ -197,13 +199,14 @@ async function acceptOrder(req, res) {
   }
 
   // Notify customer
+  const language = req.language || 'en';
   notificationService.sendToUser(order.customer_id, {
-    title: 'Provider Accepted',
-    body: 'Your service provider has confirmed the order.',
+    title: t('notifications.providerAccepted.title', {}, language),
+    body: t('notifications.providerAccepted.body', {}, language),
     data: { type: 'order_accepted', order_id: orderId },
   });
 
-  res.json({ message: 'Order accepted' });
+  res.json({ message: t('messages.orderAccepted', {}, language) });
 }
 
 /**
@@ -242,9 +245,10 @@ async function declineOrder(req, res) {
   );
 
   // Notify customer
+  const language = req.language || 'en';
   notificationService.sendToUser(order.customer_id, {
-    title: 'Provider Reassignment',
-    body: 'Your provider could not take the order. We are finding a new one.',
+    title: t('notifications.providerReassignment.title', {}, language),
+    body: t('notifications.providerReassignment.body', {}, language),
     data: { type: 'provider_declined', order_id: orderId },
   });
 
@@ -253,7 +257,7 @@ async function declineOrder(req, res) {
     console.error(`Reassignment failed for order ${orderId}:`, err.message);
   });
 
-  res.json({ message: 'Order declined, reassignment in progress' });
+  res.json({ message: t('messages.orderDeclined', {}, language) });
 }
 
 /**
@@ -277,13 +281,14 @@ async function startOrder(req, res) {
     [orderId]
   );
 
+  const language = req.language || 'en';
   notificationService.sendToUser(order.customer_id, {
-    title: 'Service Started',
-    body: 'Your service provider has started working on your order.',
+    title: t('notifications.serviceStarted.title', {}, language),
+    body: t('notifications.serviceStarted.body', {}, language),
     data: { type: 'order_started', order_id: orderId },
   });
 
-  res.json({ message: 'Order started', status: 'IN_PROGRESS' });
+  res.json({ message: t('messages.orderStarted', {}, language), status: 'IN_PROGRESS' });
 }
 
 /**
@@ -307,13 +312,14 @@ async function completeOrder(req, res) {
     [orderId]
   );
 
+  const language = req.language || 'en';
   notificationService.sendToUser(order.customer_id, {
-    title: 'Service Completed',
-    body: 'Your service has been completed. Please rate your provider.',
+    title: t('notifications.serviceCompleted.title', {}, language),
+    body: t('notifications.serviceCompleted.body', {}, language),
     data: { type: 'order_completed', order_id: orderId },
   });
 
-  res.json({ message: 'Order completed', status: 'COMPLETED' });
+  res.json({ message: t('messages.orderCompleted', {}, language), status: 'COMPLETED' });
 }
 
 /**
@@ -340,16 +346,17 @@ async function cancelOrder(req, res) {
   );
 
   // Notify the other party
+  const language = req.language || 'en';
   const notifyUserId = userId === order.customer_id ? order.provider_id : order.customer_id;
   if (notifyUserId) {
     notificationService.sendToUser(notifyUserId, {
-      title: 'Order Canceled',
-      body: 'An order has been canceled.',
+      title: t('notifications.orderCanceled.title', {}, language),
+      body: t('notifications.orderCanceled.body', {}, language),
       data: { type: 'order_canceled', order_id: orderId },
     });
   }
 
-  res.json({ message: 'Order canceled', status: 'CANCELED' });
+  res.json({ message: t('messages.orderCanceled', {}, language), status: 'CANCELED' });
 }
 
 /**
@@ -375,7 +382,8 @@ async function uploadOrderMedia(req, res) {
     urls.push(url);
   }
 
-  res.json({ message: 'Media uploaded', urls });
+  const language = req.language || 'en';
+  res.json({ message: t('messages.mediaUploaded', {}, language), urls });
 }
 
 /**

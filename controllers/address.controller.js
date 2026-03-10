@@ -1,5 +1,6 @@
 const db = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
+const { t } = require('../i18n');
 
 /**
  * Get all addresses for the current user
@@ -33,7 +34,8 @@ async function addAddress(req, res) {
     [userId, label || null, address_line || null, city || null, state || null, zip_code || null, latitude || null, longitude || null, is_default ? 1 : 0]
   );
 
-  res.status(201).json({ message: 'Address added', address_id: result.insertId });
+  const language = req.language || 'en';
+  res.status(201).json({ message: t('messages.addressAdded', {}, language), address_id: result.insertId });
 }
 
 /**
@@ -74,7 +76,8 @@ async function updateAddress(req, res) {
     ]
   );
 
-  res.json({ message: 'Address updated' });
+  const language = req.language || 'en';
+  res.json({ message: t('messages.addressUpdated', {}, language) });
 }
 
 /**
@@ -93,7 +96,8 @@ async function deleteAddress(req, res) {
     throw new AppError('Address not found', 404);
   }
 
-  res.json({ message: 'Address deleted' });
+  const language = req.language || 'en';
+  res.json({ message: t('messages.addressDeleted', {}, language) });
 }
 
 module.exports = { getAddresses, addAddress, updateAddress, deleteAddress };

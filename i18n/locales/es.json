@@ -1,0 +1,95 @@
+{
+  "messages": {
+    "registrationSuccessful": "Registro exitoso",
+    "loginSuccessful": "Inicio de sesión exitoso",
+    "profileUpdated": "Perfil actualizado exitosamente",
+    "pushTokenRegistered": "Token de notificación registrado",
+    "addressAdded": "Dirección agregada",
+    "addressUpdated": "Dirección actualizada",
+    "addressDeleted": "Dirección eliminada",
+    "orderCreated": "Pedido creado exitosamente",
+    "orderAccepted": "Pedido aceptado",
+    "orderStarted": "Pedido iniciado",
+    "orderCompleted": "Pedido completado",
+    "orderCanceled": "Pedido cancelado",
+    "orderDeclined": "Pedido rechazado, reasignación en progreso",
+    "mediaUploaded": "Medios subidos",
+    "messageSent": "Mensaje enviado",
+    "ratingSubmitted": "Calificación enviada exitosamente",
+    "profileUpdatedProvider": "Perfil actualizado exitosamente",
+    "availabilitySet": "Disponibilidad establecida en {{status}}",
+    "locationUpdated": "Ubicación actualizada",
+    "appointmentConfirmed": "Cita confirmada",
+    "rescheduleProposed": "Reprogramación propuesta",
+    "appointmentDeclined": "Cita rechazada, reasignación activada",
+    "documentStatus": "Documento {{status}}",
+    "membershipCanceled": "La membresía será cancelada al final del período de facturación",
+    "membershipCheckComplete": "Verificación de membresía completada"
+  },
+  "notifications": {
+    "newOrderAssigned": {
+      "title": "Nuevo Pedido Asignado",
+      "body": "Se te ha asignado un nuevo pedido de servicio."
+    },
+    "providerFound": {
+      "title": "Proveedor Encontrado",
+      "body": "Se ha asignado un proveedor a tu pedido."
+    },
+    "searchingProvider": {
+      "title": "Buscando Proveedor",
+      "body": "Todavía estamos buscando un proveedor en tu área. Te notificaremos cuando encontremos uno."
+    },
+    "providerAccepted": {
+      "title": "Proveedor Aceptado",
+      "body": "Tu proveedor de servicio ha confirmado el pedido."
+    },
+    "providerReassignment": {
+      "title": "Reasignación de Proveedor",
+      "body": "Tu proveedor no pudo tomar el pedido. Estamos buscando uno nuevo."
+    },
+    "serviceStarted": {
+      "title": "Servicio Iniciado",
+      "body": "Tu proveedor de servicio ha comenzado a trabajar en tu pedido."
+    },
+    "serviceCompleted": {
+      "title": "Servicio Completado",
+      "body": "Tu servicio ha sido completado. Por favor califica a tu proveedor."
+    },
+    "orderCanceled": {
+      "title": "Pedido Cancelado",
+      "body": "Un pedido ha sido cancelado."
+    },
+    "appointmentConfirmed": {
+      "title": "Cita Confirmada",
+      "body": "Tu proveedor ha confirmado la cita programada."
+    },
+    "rescheduleRequested": {
+      "title": "Solicitud de Reprogramación",
+      "body": "Tu proveedor ha propuesto un nuevo horario para la cita."
+    },
+    "providerReassignmentAppointment": {
+      "title": "Reasignación de Proveedor",
+      "body": "Tu proveedor no pudo tomar la cita programada. Estamos buscando uno nuevo."
+    },
+    "membershipExpiringSoon": {
+      "title": "Membresía Por Expirar",
+      "body": "Tu membresía expira el {{date}}. Renueva para seguir recibiendo pedidos."
+    },
+    "membershipExpired": {
+      "title": "Membresía Expirada",
+      "body": "Tu membresía ha expirado. Renueva para continuar recibiendo pedidos."
+    },
+    "newMessage": {
+      "title": "Nuevo Mensaje",
+      "body": "Tienes un nuevo mensaje"
+    }
+  },
+  "errors": {
+    "generic": "Algo salió mal",
+    "unauthorized": "No autorizado",
+    "notFound": "Recurso no encontrado",
+    "validationFailed": "Validación fallida",
+    "webhookVerificationFailed": "Verificación de webhook fallida",
+    "membershipCheckFailed": "Verificación de membresía fallida"
+  }
+}

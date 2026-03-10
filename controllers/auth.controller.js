@@ -2,6 +2,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
+const { t } = require('../i18n');
 
 /**
  * Register a new user (customer or provider)
@@ -33,9 +34,10 @@ async function register(req, res) {
   await db.query('INSERT INTO user_rating_summary (user_id) VALUES (?)', [userId]);
 
   const token = generateToken(userId, role);
+  const language = req.language || 'en';
 
   res.status(201).json({
-    message: 'Registration successful',
+    message: t('messages.registrationSuccessful', {}, language),
     token,
     user: { id: userId, email, full_name, role },
   });
@@ -66,9 +68,10 @@ async function login(req, res) {
   }
 
   const token = generateToken(user.id, user.role);
+  const language = req.language || 'en';
 
   res.json({
-    message: 'Login successful',
+    message: t('messages.loginSuccessful', {}, language),
     token,
     user: {
       id: user.id,
@@ -131,8 +134,9 @@ async function updateProfile(req, res) {
 
   values.push(userId);
   await db.query(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`, values);
+  const language = req.language || 'en';
 
-  res.json({ message: 'Profile updated successfully' });
+  res.json({ message: t('messages.profileUpdated', {}, language) });
 }
 
 /**
@@ -148,8 +152,9 @@ async function registerPushToken(req, res) {
      ON DUPLICATE KEY UPDATE user_id = ?, is_active = 1, updated_at = NOW()`,
     [userId, token, platform || 'android', userId]
   );
+  const language = req.language || 'en';
 
-  res.json({ message: 'Push token registered' });
+  res.json({ message: t('messages.pushTokenRegistered', {}, language) });
 }
 
 // ── Helper ──────────────────────────────────────────────────

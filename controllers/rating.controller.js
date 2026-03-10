@@ -75,7 +75,9 @@ async function submitRating(req, res) {
     [summary.avg_rating || 0, summary.count || 0, summary.total || 0, ratedId]
   );
 
-  res.status(201).json({ message: 'Rating submitted successfully' });
+  const language = req.language || 'en';
+  const { t } = require('../i18n');
+  res.status(201).json({ message: t('messages.ratingSubmitted', {}, language) });
 }
 
 /**

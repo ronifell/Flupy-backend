@@ -1,0 +1,95 @@
+{
+  "messages": {
+    "registrationSuccessful": "Registration successful",
+    "loginSuccessful": "Login successful",
+    "profileUpdated": "Profile updated successfully",
+    "pushTokenRegistered": "Push token registered",
+    "addressAdded": "Address added",
+    "addressUpdated": "Address updated",
+    "addressDeleted": "Address deleted",
+    "orderCreated": "Order created successfully",
+    "orderAccepted": "Order accepted",
+    "orderStarted": "Order started",
+    "orderCompleted": "Order completed",
+    "orderCanceled": "Order canceled",
+    "orderDeclined": "Order declined, reassignment in progress",
+    "mediaUploaded": "Media uploaded",
+    "messageSent": "Message sent",
+    "ratingSubmitted": "Rating submitted successfully",
+    "profileUpdatedProvider": "Profile updated successfully",
+    "availabilitySet": "Availability set to {{status}}",
+    "locationUpdated": "Location updated",
+    "appointmentConfirmed": "Appointment confirmed",
+    "rescheduleProposed": "Reschedule proposed",
+    "appointmentDeclined": "Appointment declined, reassignment triggered",
+    "documentStatus": "Document {{status}}",
+    "membershipCanceled": "Membership will be canceled at the end of the billing period",
+    "membershipCheckComplete": "Membership check complete"
+  },
+  "notifications": {
+    "newOrderAssigned": {
+      "title": "New Order Assigned",
+      "body": "You have been assigned a new service order."
+    },
+    "providerFound": {
+      "title": "Provider Found",
+      "body": "A provider has been assigned to your order."
+    },
+    "searchingProvider": {
+      "title": "Searching for Provider",
+      "body": "We are still looking for a provider in your area. We will notify you once one is found."
+    },
+    "providerAccepted": {
+      "title": "Provider Accepted",
+      "body": "Your service provider has confirmed the order."
+    },
+    "providerReassignment": {
+      "title": "Provider Reassignment",
+      "body": "Your provider could not take the order. We are finding a new one."
+    },
+    "serviceStarted": {
+      "title": "Service Started",
+      "body": "Your service provider has started working on your order."
+    },
+    "serviceCompleted": {
+      "title": "Service Completed",
+      "body": "Your service has been completed. Please rate your provider."
+    },
+    "orderCanceled": {
+      "title": "Order Canceled",
+      "body": "An order has been canceled."
+    },
+    "appointmentConfirmed": {
+      "title": "Appointment Confirmed",
+      "body": "Your provider has confirmed the scheduled appointment."
+    },
+    "rescheduleRequested": {
+      "title": "Reschedule Requested",
+      "body": "Your provider has proposed a new time for the appointment."
+    },
+    "providerReassignmentAppointment": {
+      "title": "Provider Reassignment",
+      "body": "Your provider could not take the scheduled appointment. We are finding a new one."
+    },
+    "membershipExpiringSoon": {
+      "title": "Membership Expiring Soon",
+      "body": "Your membership expires on {{date}}. Renew to keep receiving orders."
+    },
+    "membershipExpired": {
+      "title": "Membership Expired",
+      "body": "Your membership has expired. Renew to continue receiving orders."
+    },
+    "newMessage": {
+      "title": "New Message",
+      "body": "You have a new message"
+    }
+  },
+  "errors": {
+    "generic": "Something went wrong",
+    "unauthorized": "Unauthorized",
+    "notFound": "Resource not found",
+    "validationFailed": "Validation failed",
+    "webhookVerificationFailed": "Webhook verification failed",
+    "membershipCheckFailed": "Membership check failed"
+  }
+}

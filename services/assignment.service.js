@@ -1,5 +1,6 @@
 const db = require('../config/database');
 const notificationService = require('./notification.service');
+const { t } = require('../i18n');
 
 const SEARCH_RADII_KM = [3, 5, 8, 12, 20];
 const EARTH_RADIUS_M = 6371000;
@@ -192,16 +193,21 @@ async function assignProvider(orderId) {
         [orderId, order.customer_id, bestProvider.provider_id]
       );
 
+      // Get user language preferences (default to 'en' for now)
+      // TODO: Get actual language from user preferences
+      const providerLang = 'en';
+      const customerLang = 'en';
+
       // Send push notifications
       notificationService.sendToUser(bestProvider.provider_id, {
-        title: 'New Order Assigned',
-        body: 'You have been assigned a new service order.',
+        title: t('notifications.newOrderAssigned.title', {}, providerLang),
+        body: t('notifications.newOrderAssigned.body', {}, providerLang),
         data: { type: 'order_assigned', order_id: orderId },
       });
 
       notificationService.sendToUser(order.customer_id, {
-        title: 'Provider Found',
-        body: 'A provider has been assigned to your order.',
+        title: t('notifications.providerFound.title', {}, customerLang),
+        body: t('notifications.providerFound.body', {}, customerLang),
         data: { type: 'provider_assigned', order_id: orderId },
       });
 
@@ -215,9 +221,13 @@ async function assignProvider(orderId) {
   // No provider found after all radii
   console.warn(`⚠️  Order ${orderId}: No provider found after expanding to ${SEARCH_RADII_KM[SEARCH_RADII_KM.length - 1]}km`);
 
+  // Get customer language (default to 'en' for now)
+  // TODO: Get actual language from user preferences
+  const customerLang = 'en';
+
   notificationService.sendToUser(order.customer_id, {
-    title: 'Searching for Provider',
-    body: 'We are still looking for a provider in your area. We will notify you once one is found.',
+    title: t('notifications.searchingProvider.title', {}, customerLang),
+    body: t('notifications.searchingProvider.body', {}, customerLang),
     data: { type: 'no_provider_found', order_id: orderId },
   });
 
