@@ -143,8 +143,41 @@ async function getOrderById(req, res) {
     throw new AppError('Order not found', 404);
   }
 
-  // Authorization: only customer or assigned provider can view
-  if (order.customer_id !== userId && order.provider_id !== userId) {
+  const role = req.user.role;
+
+  // Authorization:
+  // - Customer can view their own orders
+  // - Provider can view assigned orders OR unassigned orders they're eligible for (found in search)
+  let hasAccess = false;
+
+  if (role === 'customer') {
+    hasAccess = order.customer_id === userId;
+  } else if (role === 'provider') {
+    // Provider can view if:
+    // 1. They are assigned to the order, OR
+    // 2. Order is unassigned (provider_id IS NULL) and they offer the service
+    if (order.provider_id === userId) {
+      hasAccess = true;
+    } else if (!order.provider_id) {
+      // Check if provider offers this service
+      // First get the provider profile ID from user ID
+      const [profile] = await db.query(
+        'SELECT id FROM provider_profiles WHERE user_id = ?',
+        [userId]
+      );
+      
+      if (profile) {
+        // Then check if this provider offers the service
+        const [providerService] = await db.query(
+          'SELECT * FROM provider_services WHERE provider_id = ? AND service_id = ?',
+          [profile.id, order.service_id]
+        );
+        hasAccess = !!providerService;
+      }
+    }
+  }
+
+  if (!hasAccess) {
     throw new AppError('Access denied', 403);
   }
 
@@ -170,6 +203,73 @@ async function getOrderById(req, res) {
   );
 
   res.json({ order, media, appointments, ratings });
+}
+
+/**
+ * Provider claims an unassigned order (found in search)
+ * This assigns the order to the provider and changes status to ASSIGNED
+ */
+async function claimOrder(req, res) {
+  const orderId = req.params.id;
+  const providerId = req.user.id;
+
+  // Get provider profile to verify they offer the service
+  const [profile] = await db.query(
+    'SELECT id FROM provider_profiles WHERE user_id = ?',
+    [providerId]
+  );
+
+  if (!profile) {
+    throw new AppError('Provider profile not found', 404);
+  }
+
+  // Get the order and verify it's unassigned
+  const [order] = await db.query(
+    'SELECT * FROM service_orders WHERE id = ?',
+    [orderId]
+  );
+
+  if (!order) {
+    throw new AppError('Order not found', 404);
+  }
+
+  // Verify order is unassigned
+  if (order.provider_id) {
+    throw new AppError('Order is already assigned to another provider', 400);
+  }
+
+  // Verify order status allows claiming
+  if (!['CREATED', 'SEARCHING'].includes(order.status)) {
+    throw new AppError(`Cannot claim order with status: ${order.status}`, 400);
+  }
+
+  // Verify provider offers this service
+  const [providerService] = await db.query(
+    'SELECT * FROM provider_services WHERE provider_id = ? AND service_id = ?',
+    [profile.id, order.service_id]
+  );
+
+  if (!providerService) {
+    throw new AppError('You do not offer this service type', 403);
+  }
+
+  // Claim the order: assign provider and update status
+  await db.query(
+    `UPDATE service_orders 
+     SET provider_id = ?, status = 'ASSIGNED', assigned_at = NOW() 
+     WHERE id = ?`,
+    [providerId, orderId]
+  );
+
+  // Notify customer
+  const language = req.language || 'en';
+  notificationService.sendToUser(order.customer_id, {
+    title: t('notifications.providerClaimed.title', {}, language),
+    body: t('notifications.providerClaimed.body', {}, language),
+    data: { type: 'order_claimed', order_id: orderId },
+  });
+
+  res.json({ message: t('messages.orderClaimed', {}, language) });
 }
 
 /**
@@ -400,6 +500,7 @@ module.exports = {
   createOrder,
   getOrders,
   getOrderById,
+  claimOrder,
   acceptOrder,
   declineOrder,
   startOrder,

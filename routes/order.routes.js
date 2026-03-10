@@ -28,6 +28,9 @@ router.get('/', asyncHandler(orderController.getOrders));
 // Get single order
 router.get('/:id', idParam, validate, asyncHandler(orderController.getOrderById));
 
+// Provider: claim unassigned order
+router.post('/:id/claim', authorize('provider'), idParam, validate, asyncHandler(orderController.claimOrder));
+
 // Provider: accept order
 router.post('/:id/accept', authorize('provider'), idParam, validate, asyncHandler(orderController.acceptOrder));
 

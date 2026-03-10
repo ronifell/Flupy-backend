@@ -388,6 +388,357 @@ async function getDashboard(req, res) {
 }
 
 /**
+ * Search for customers/orders by proximity
+ * Providers can search for orders based on their stored addresses or current GPS location
+ */
+async function searchCustomers(req, res) {
+  const userId = req.user.id;
+  const { latitude, longitude, radius_km = 20, service_id, status } = req.query;
+
+  // Get provider profile to check services
+  const [profile] = await db.query(
+    'SELECT id, current_lat, current_lng, location_updated_at FROM provider_profiles WHERE user_id = ?',
+    [userId]
+  );
+
+  if (!profile) {
+    throw new AppError('Provider profile not found', 404);
+  }
+
+  // Check if provider has any services configured
+  const providerServices = await db.query(
+    'SELECT service_id FROM provider_services WHERE provider_id = ?',
+    [profile.id]
+  );
+
+  if (providerServices.length === 0) {
+    console.log(`[Provider Search] User ${userId} (profile_id: ${profile.id}) has no services configured`);
+    return res.json({ 
+      orders: [], 
+      message: 'No services configured. Please add services to your profile to search for orders.',
+      search_location: null 
+    });
+  }
+
+  // Convert service_ids to numbers for consistent comparison
+  // MySQL may return them as strings, so ensure they're integers
+  const serviceIds = providerServices.map(ps => {
+    const id = typeof ps.service_id === 'string' ? parseInt(ps.service_id, 10) : ps.service_id;
+    return id;
+  }).filter(id => !isNaN(id));
+  
+  console.log(`[Provider Search] Provider ${userId} (profile_id: ${profile.id}) offers service IDs:`, serviceIds);
+  console.log(`[Provider Search] Raw provider services from DB:`, providerServices);
+
+  // Determine search location: prioritize GPS if recent, otherwise use provided coords or addresses
+  let searchLat = latitude ? parseFloat(latitude) : null;
+  let searchLng = longitude ? parseFloat(longitude) : null;
+  let locationSource = 'provided';
+
+  // If no coordinates provided, try to use current GPS location if recent (< 30 minutes)
+  if ((!searchLat || !searchLng) && profile.current_lat && profile.current_lng && profile.location_updated_at) {
+    const locationAge = Math.abs(new Date() - new Date(profile.location_updated_at)) / (1000 * 60); // minutes
+    if (locationAge <= 30) {
+      searchLat = parseFloat(profile.current_lat);
+      searchLng = parseFloat(profile.current_lng);
+      locationSource = 'gps';
+    }
+  }
+
+  // If still no location, use provider's stored addresses
+  if (!searchLat || !searchLng) {
+    const addresses = await db.query(
+      'SELECT latitude, longitude, is_default FROM user_addresses WHERE user_id = ? ORDER BY is_default DESC LIMIT 1',
+      [userId]
+    );
+
+    if (addresses.length === 0) {
+      throw new AppError('No location provided. Please set your address, use current location, or provide latitude/longitude.', 400);
+    }
+
+    searchLat = parseFloat(addresses[0].latitude);
+    searchLng = parseFloat(addresses[0].longitude);
+    locationSource = 'address';
+  }
+
+  // Validate coordinates
+  if (isNaN(searchLat) || isNaN(searchLng) || searchLat < -90 || searchLat > 90 || searchLng < -180 || searchLng > 180) {
+    throw new AppError('Invalid latitude or longitude values', 400);
+  }
+
+  const radius = parseFloat(radius_km) || 20;
+
+  // Build query conditions
+  let whereConditions = [
+    'so.status IN (?, ?)', // Only search for CREATED or SEARCHING orders
+    'so.provider_id IS NULL', // Not already assigned
+    'so.latitude IS NOT NULL', // Ensure order has valid location
+    'so.longitude IS NOT NULL',
+    'ST_Distance_Sphere(POINT(so.longitude, so.latitude), POINT(?, ?)) / 1000 <= ?',
+  ];
+  // Parameters for WHERE conditions (status, distance calculation)
+  let queryParams = ['CREATED', 'SEARCHING', searchLng, searchLat, radius];
+
+  // Filter by service
+  if (service_id) {
+    const serviceId = parseInt(service_id);
+    // Check if provider offers this service
+    const offersService = serviceIds.includes(serviceId);
+    
+    if (offersService) {
+      whereConditions.push('so.service_id = ?');
+      queryParams.push(serviceId);
+      console.log(`[Provider Search] Filtering by specific service_id: ${serviceId}`);
+    } else {
+      // Provider doesn't offer this service, return empty results
+      console.log(`[Provider Search] Provider doesn't offer service_id ${serviceId}. Provider offers:`, serviceIds);
+      return res.json({ 
+        orders: [], 
+        message: `You don't offer this service. Please add it to your profile.`,
+        search_location: { latitude: searchLat, longitude: searchLng, radius_km: radius, source: locationSource } 
+      });
+    }
+  } else {
+    // Only show orders for services the provider offers
+    if (serviceIds.length > 0) {
+      whereConditions.push(`so.service_id IN (${serviceIds.map(() => '?').join(',')})`);
+      queryParams.push(...serviceIds);
+      console.log(`[Provider Search] Filtering by provider's services:`, serviceIds);
+    } else {
+      // No services configured (shouldn't reach here due to earlier check, but safety check)
+      return res.json({ orders: [], message: 'No services configured.', search_location: null });
+    }
+  }
+
+  // Filter by status if provided
+  if (status) {
+    whereConditions = whereConditions.filter(c => !c.includes('so.status'));
+    whereConditions.push('so.status = ?');
+    // Find and replace the status condition
+    const statusIndex = queryParams.findIndex((p, i) => i < 2 && (p === 'CREATED' || p === 'SEARCHING'));
+    if (statusIndex !== -1) {
+      queryParams[statusIndex] = status;
+    }
+  }
+
+  // Diagnostic: Check all available orders before filtering
+  const allOrders = await db.query(
+    `SELECT 
+       so.id,
+       so.status,
+       so.provider_id,
+       so.service_id,
+       so.latitude,
+       so.longitude,
+       sc.name as service_name,
+       ST_Distance_Sphere(
+         POINT(so.longitude, so.latitude),
+         POINT(?, ?)
+       ) / 1000 AS distance_km
+     FROM service_orders so
+     JOIN service_categories sc ON sc.id = so.service_id
+     WHERE so.latitude IS NOT NULL AND so.longitude IS NOT NULL
+     ORDER BY so.created_at DESC
+     LIMIT 10`,
+    [searchLng, searchLat]
+  );
+
+  console.log(`[Provider Search] Diagnostic - All orders in system (first 10):`, allOrders.map(o => ({
+    id: o.id,
+    status: o.status,
+    provider_id: o.provider_id,
+    service_id: o.service_id,
+    service_name: o.service_name,
+    distance_km: o.distance_km?.toFixed(2),
+    location: `${o.latitude}, ${o.longitude}`
+  })));
+
+  console.log(`[Provider Search] Provider ${userId} (profile_id: ${profile.id}) offers services:`, providerServices.map(ps => ps.service_id));
+  console.log(`[Provider Search] Search conditions:`, {
+    location: `${searchLat}, ${searchLng}`,
+    radius_km: radius,
+    service_filter: service_id ? `specific: ${service_id}` : `provider_services: [${providerServices.map(ps => ps.service_id).join(', ')}]`,
+    status_filter: status || 'CREATED or SEARCHING',
+    whereConditions: whereConditions
+  });
+
+  // Log the exact query and parameters for debugging
+  console.log(`[Provider Search] Query params (${queryParams.length} params):`, queryParams);
+  console.log(`[Provider Search] Final WHERE clause:`, whereConditions.join(' AND '));
+
+  // Test query to verify orders exist with these conditions
+  const testQuery = await db.query(
+    `SELECT 
+       so.id,
+       so.status,
+       so.provider_id,
+       so.service_id,
+       CASE WHEN so.status IN ('CREATED', 'SEARCHING') THEN 1 ELSE 0 END as status_match,
+       CASE WHEN so.provider_id IS NULL THEN 1 ELSE 0 END as not_assigned,
+       CASE WHEN so.service_id IN (${serviceIds.map(() => '?').join(',')}) THEN 1 ELSE 0 END as service_match
+     FROM service_orders so
+     WHERE so.latitude IS NOT NULL 
+       AND so.longitude IS NOT NULL
+       AND ST_Distance_Sphere(POINT(so.longitude, so.latitude), POINT(?, ?)) / 1000 <= ?
+     ORDER BY so.created_at DESC
+     LIMIT 5`,
+    [...serviceIds, searchLng, searchLat, radius]
+  );
+  console.log(`[Provider Search] Test query results:`, testQuery);
+
+  // Test query without JOINs to see if JOINs are the issue
+  const testQueryNoJoins = await db.query(
+    `SELECT
+       so.id,
+       so.status,
+       so.provider_id,
+       so.service_id,
+       so.latitude,
+       so.longitude
+     FROM service_orders so
+     WHERE ${whereConditions.join(' AND ')}
+     LIMIT 5`,
+    queryParams
+  );
+  console.log(`[Provider Search] Test query WITHOUT JOINs (should find orders 11 and 8):`, testQueryNoJoins);
+
+  // Test if service_categories and users exist for these orders
+  const testJoins = await db.query(
+    `SELECT 
+       so.id as order_id,
+       so.service_id,
+       so.customer_id,
+       sc.id as category_exists,
+       u.id as user_exists
+     FROM service_orders so
+     LEFT JOIN service_categories sc ON sc.id = so.service_id
+     LEFT JOIN users u ON u.id = so.customer_id
+     WHERE so.id IN (11, 8)`,
+    []
+  );
+  console.log(`[Provider Search] JOIN test for orders 11 and 8:`, testJoins);
+
+  // Build the complete parameter array for the main query
+  // Parameters order: status (2), distance in WHERE (3), service_ids (N), distance in SELECT (2)
+  const allParams = [...queryParams, searchLng, searchLat];
+  console.log(`[Provider Search] All query parameters (${allParams.length} total):`, allParams);
+
+  // Debug: Try the exact same query structure as the test query but with JOINs
+  const debugQuery = await db.query(
+    `SELECT
+       so.id,
+       so.status,
+       so.provider_id,
+       so.service_id,
+       sc.id as category_id,
+       u.id as user_id
+     FROM service_orders so
+     INNER JOIN service_categories sc ON sc.id = so.service_id
+     INNER JOIN users u ON u.id = so.customer_id
+     WHERE ${whereConditions.join(' AND ')}
+     LIMIT 5`,
+    queryParams
+  );
+  console.log(`[Provider Search] Debug query with JOINs (using queryParams only):`, debugQuery);
+
+  // Execute search query
+  // The debug query works with just queryParams, so the issue is the SELECT distance calculation
+  // We'll calculate distance in the application instead of in SQL to avoid parameter binding issues
+  const ordersRaw = await db.query(
+    `SELECT
+       so.id,
+       so.description,
+       so.status,
+       so.order_mode,
+       so.latitude,
+       so.longitude,
+       so.created_at,
+       sc.id as service_id,
+       sc.name as service_name,
+       sc.slug as service_slug,
+       u.id as customer_id,
+       u.full_name as customer_name,
+       u.phone as customer_phone
+     FROM service_orders so
+     INNER JOIN service_categories sc ON sc.id = so.service_id
+     INNER JOIN users u ON u.id = so.customer_id
+     WHERE ${whereConditions.join(' AND ')}
+     ORDER BY so.created_at DESC
+     LIMIT 50`,
+    queryParams
+  );
+
+  // Calculate distance in JavaScript to avoid SQL parameter binding issues
+  const orders = ordersRaw.map(order => {
+    const orderLat = parseFloat(order.latitude);
+    const orderLng = parseFloat(order.longitude);
+    
+    // Haversine formula for distance calculation
+    const R = 6371; // Earth's radius in km
+    const dLat = (orderLat - searchLat) * Math.PI / 180;
+    const dLng = (orderLng - searchLng) * Math.PI / 180;
+    const a = 
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(searchLat * Math.PI / 180) * Math.cos(orderLat * Math.PI / 180) *
+      Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const distance_km = R * c;
+    
+    return {
+      ...order,
+      distance_km: parseFloat(distance_km.toFixed(2))
+    };
+  }).sort((a, b) => {
+    // Sort by distance first, then by creation date
+    if (Math.abs(a.distance_km - b.distance_km) < 0.01) {
+      return new Date(b.created_at) - new Date(a.created_at);
+    }
+    return a.distance_km - b.distance_km;
+  });
+  
+  console.log(`[Provider Search] Query executed. Found ${orders.length} orders.`);
+  if (orders.length > 0) {
+    console.log(`[Provider Search] Sample order:`, {
+      id: orders[0].id,
+      status: orders[0].status,
+      service_id: orders[0].service_id,
+      service_name: orders[0].service_name,
+      distance_km: orders[0].distance_km
+    });
+  } else {
+    console.log(`[Provider Search] No orders found. Test query without JOINs found ${testQueryNoJoins.length} orders.`);
+    console.log(`[Provider Search] Debug query with JOINs found ${debugQuery.length} orders.`);
+  }
+
+  console.log(`[Provider Search] User ${userId} found ${orders.length} orders within ${radius}km from ${locationSource} location (${searchLat}, ${searchLng})`);
+  
+  if (orders.length === 0 && allOrders.length > 0) {
+    // Check why orders are being filtered out
+    const serviceIds = providerServices.map(ps => ps.service_id);
+    const matchingOrders = allOrders.filter(o => {
+      const statusMatch = ['CREATED', 'SEARCHING'].includes(o.status);
+      const notAssigned = o.provider_id === null;
+      const serviceMatch = serviceIds.includes(o.service_id);
+      const distanceMatch = o.distance_km <= radius;
+      
+      return { order_id: o.id, statusMatch, notAssigned, serviceMatch, distanceMatch, allMatch: statusMatch && notAssigned && serviceMatch && distanceMatch };
+    });
+    
+    console.log(`[Provider Search] Diagnostic - Why orders are filtered:`, matchingOrders);
+  }
+
+  res.json({ 
+    orders, 
+    search_location: { 
+      latitude: searchLat, 
+      longitude: searchLng, 
+      radius_km: radius,
+      source: locationSource 
+    } 
+  });
+}
+
+/**
  * Approve or reject provider verification document (Admin function)
  * When a document is approved, automatically set provider as verified if they have at least one approved document
  */
@@ -481,5 +832,6 @@ module.exports = {
   respondToAppointment,
   getDashboard,
   reviewDocument,
+  searchCustomers,
   updateAvailabilityIfEligible, // Export helper for use in other controllers
 };

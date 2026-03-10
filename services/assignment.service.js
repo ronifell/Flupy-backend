@@ -91,18 +91,46 @@ async function assignProvider(orderId) {
     attemptNumber++;
 
     // Find eligible providers within radius
+    // Consider both current GPS location and stored addresses
+    // Use the closest location (GPS if recent, otherwise closest address)
     const candidates = await db.query(
       `SELECT
          pp.user_id as provider_id,
          pp.id as provider_profile_id,
          pp.current_lat,
          pp.current_lng,
+         pp.location_updated_at,
          urs.average_rating,
          urs.total_ratings,
-         ST_Distance_Sphere(
-           POINT(pp.current_lng, pp.current_lat),
-           POINT(?, ?)
-         ) / 1000 AS distance_km
+         -- Calculate distance from current GPS if available and recent
+         CASE 
+           WHEN pp.current_lat IS NOT NULL 
+             AND pp.current_lng IS NOT NULL 
+             AND pp.location_updated_at IS NOT NULL
+             AND pp.location_updated_at > DATE_SUB(NOW(), INTERVAL 30 MINUTE)
+           THEN ST_Distance_Sphere(
+             POINT(pp.current_lng, pp.current_lat),
+             POINT(?, ?)
+           ) / 1000
+           -- Otherwise use closest address
+           ELSE (
+             SELECT MIN(ST_Distance_Sphere(
+               POINT(ua.longitude, ua.latitude),
+               POINT(?, ?)
+             ) / 1000)
+             FROM user_addresses ua
+             WHERE ua.user_id = pp.user_id
+           )
+         END AS distance_km,
+         -- Determine which location is being used
+         CASE 
+           WHEN pp.current_lat IS NOT NULL 
+             AND pp.current_lng IS NOT NULL 
+             AND pp.location_updated_at IS NOT NULL
+             AND pp.location_updated_at > DATE_SUB(NOW(), INTERVAL 30 MINUTE)
+           THEN 'gps'
+           ELSE 'address'
+         END AS location_type
        FROM provider_profiles pp
        JOIN provider_services ps ON ps.provider_id = pp.id
        LEFT JOIN user_rating_summary urs ON urs.user_id = pp.user_id
@@ -110,26 +138,52 @@ async function assignProvider(orderId) {
          AND pp.is_verified = 1
          AND pp.membership_status = 'active'
          AND ps.service_id = ?
-         AND pp.current_lat IS NOT NULL
-         AND pp.current_lng IS NOT NULL
-         AND pp.location_updated_at IS NOT NULL
-         AND pp.location_updated_at > DATE_SUB(NOW(), INTERVAL 30 MINUTE)
          AND pp.user_id != ?
-         AND ST_Distance_Sphere(
-               POINT(pp.current_lng, pp.current_lat),
+         -- Must have either recent GPS location OR at least one stored address
+         AND (
+           (pp.current_lat IS NOT NULL 
+            AND pp.current_lng IS NOT NULL 
+            AND pp.location_updated_at IS NOT NULL
+            AND pp.location_updated_at > DATE_SUB(NOW(), INTERVAL 30 MINUTE))
+           OR EXISTS (
+             SELECT 1 FROM user_addresses ua WHERE ua.user_id = pp.user_id
+           )
+         )
+         -- Distance check: either GPS or closest address must be within radius
+         AND (
+           -- GPS location within radius
+           (pp.current_lat IS NOT NULL 
+            AND pp.current_lng IS NOT NULL 
+            AND pp.location_updated_at IS NOT NULL
+            AND pp.location_updated_at > DATE_SUB(NOW(), INTERVAL 30 MINUTE)
+            AND ST_Distance_Sphere(
+              POINT(pp.current_lng, pp.current_lat),
+              POINT(?, ?)
+            ) / 1000 <= ?)
+           -- OR closest address within radius
+           OR (
+             SELECT MIN(ST_Distance_Sphere(
+               POINT(ua.longitude, ua.latitude),
                POINT(?, ?)
-             ) / 1000 <= ?
+             ) / 1000)
+             FROM user_addresses ua
+             WHERE ua.user_id = pp.user_id
+           ) <= ?
+         )
        ORDER BY
          urs.average_rating DESC,
          urs.total_ratings DESC,
          distance_km ASC
        LIMIT 10`,
       [
-        order.longitude, order.latitude,
+        order.longitude, order.latitude,  // For GPS distance calculation
+        order.longitude, order.latitude,  // For address distance calculation
         order.service_id,
         order.customer_id,
-        order.longitude, order.latitude,
-        radiusKm,
+        order.longitude, order.latitude,  // For GPS radius check
+        radiusKm,                          // GPS radius
+        order.longitude, order.latitude,  // For address radius check
+        radiusKm,                          // Address radius
       ]
     );
     

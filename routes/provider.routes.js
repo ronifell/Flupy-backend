@@ -38,4 +38,7 @@ router.post(
 // In production, this should be protected with admin authentication
 router.post('/documents/:id/review', asyncHandler(providerController.reviewDocument));
 
+// Search for customers/orders by proximity
+router.get('/search', asyncHandler(providerController.searchCustomers));
+
 module.exports = router;
