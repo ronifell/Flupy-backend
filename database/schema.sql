@@ -18,13 +18,15 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash   VARCHAR(255)    NOT NULL,
   full_name       VARCHAR(150)    NOT NULL,
   phone           VARCHAR(30)     NULL,
+  country         VARCHAR(100)    NOT NULL,
   role            ENUM('customer','provider') NOT NULL DEFAULT 'customer',
   avatar_url      VARCHAR(500)    NULL,
   is_active       TINYINT(1)      NOT NULL DEFAULT 1,
   created_at      TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at      TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_users_role (role),
-  INDEX idx_users_email (email)
+  INDEX idx_users_email (email),
+  INDEX idx_users_country (country)
 ) ENGINE=InnoDB;
 
 -- ============================================================
@@ -52,6 +54,9 @@ CREATE TABLE IF NOT EXISTS user_addresses (
 CREATE TABLE IF NOT EXISTS provider_profiles (
   id              INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   user_id         INT UNSIGNED    NOT NULL UNIQUE,
+  provider_type   ENUM('Person','Company') NOT NULL DEFAULT 'Person',
+  rnc             VARCHAR(50)     NULL,              -- Company ID (RNC) - required if provider_type is Company
+  personal_id     VARCHAR(50)     NULL,              -- Personal ID - required if provider_type is Person
   bio             TEXT            NULL,
   is_verified     TINYINT(1)      NOT NULL DEFAULT 0,
   is_available    TINYINT(1)      NOT NULL DEFAULT 0,
@@ -66,7 +71,8 @@ CREATE TABLE IF NOT EXISTS provider_profiles (
   updated_at      TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   INDEX idx_prov_available (is_available, is_verified, membership_status),
-  INDEX idx_prov_location (current_lat, current_lng)
+  INDEX idx_prov_location (current_lat, current_lng),
+  INDEX idx_prov_type (provider_type)
 ) ENGINE=InnoDB;
 
 -- ============================================================
@@ -88,13 +94,18 @@ CREATE TABLE IF NOT EXISTS provider_documents (
 -- ============================================================
 CREATE TABLE IF NOT EXISTS service_categories (
   id              INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  name            VARCHAR(100)    NOT NULL UNIQUE,
-  slug            VARCHAR(100)    NOT NULL UNIQUE,
+  name            VARCHAR(100)    NOT NULL,
+  slug            VARCHAR(100)    NOT NULL,
   description     TEXT            NULL,
   icon_url        VARCHAR(500)    NULL,
+  country         VARCHAR(100)    NOT NULL,
   is_active       TINYINT(1)      NOT NULL DEFAULT 1,
   sort_order      INT             NOT NULL DEFAULT 0,
-  created_at      TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP
+  created_at      TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_service_country (name, country),
+  UNIQUE KEY uq_slug_country (slug, country),
+  INDEX idx_service_country (country),
+  INDEX idx_service_active (is_active, country)
 ) ENGINE=InnoDB;
 
 -- ============================================================
@@ -330,15 +341,17 @@ CREATE TABLE IF NOT EXISTS ai_messages (
 
 -- ============================================================
 -- SEED DATA: Service Categories
+-- Note: Update country values as needed for your target markets
 -- ============================================================
-INSERT INTO service_categories (name, slug, description, icon_url, sort_order) VALUES
-  ('Electricity',       'electricity',        'Electrical repairs and installations',  'electricity.png',    1),
-  ('Plumbing',          'plumbing',            'Pipe, faucet, and drain services',     'plumbing.png',       2),
-  ('Air Conditioning',  'air-conditioning',    'AC repair, maintenance & installation','ac.png',             3),
-  ('Refrigerators',     'refrigerators',       'Fridge and freezer repairs',           'fridge.png',         4),
-  ('Washing Machines',  'washing-machines',    'Washer and dryer services',            'washer.png',         5),
-  ('CCTV',              'cctv',                'Security camera installation & repair','cctv.png',           6),
-  ('Painting',          'painting',            'Interior and exterior painting',       'painting.png',       7),
-  ('Carpentry',         'carpentry',           'Wood and furniture repairs',           'carpentry.png',      8),
-  ('General Handyman',  'general-handyman',    'Miscellaneous repair services',        'handyman.png',       9)
+-- Example seed data for Dominican Republic (DR) - update country codes as needed
+INSERT INTO service_categories (name, slug, description, icon_url, country, sort_order) VALUES
+  ('Electricity',       'electricity',        'Electrical repairs and installations',  'electricity.png',    'DR',    1),
+  ('Plumbing',          'plumbing',            'Pipe, faucet, and drain services',     'plumbing.png',       'DR',    2),
+  ('Air Conditioning',  'air-conditioning',    'AC repair, maintenance & installation','ac.png',             'DR',    3),
+  ('Refrigerators',     'refrigerators',       'Fridge and freezer repairs',           'fridge.png',         'DR',    4),
+  ('Washing Machines',  'washing-machines',    'Washer and dryer services',            'washer.png',         'DR',    5),
+  ('CCTV',              'cctv',                'Security camera installation & repair','cctv.png',           'DR',    6),
+  ('Painting',          'painting',            'Interior and exterior painting',       'painting.png',       'DR',    7),
+  ('Carpentry',         'carpentry',           'Wood and furniture repairs',           'carpentry.png',      'DR',    8),
+  ('General Handyman',  'general-handyman',    'Miscellaneous repair services',        'handyman.png',       'DR',    9)
 ON DUPLICATE KEY UPDATE name = VALUES(name);

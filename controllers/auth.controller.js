@@ -8,7 +8,12 @@ const { t } = require('../i18n');
  * Register a new user (customer or provider)
  */
 async function register(req, res) {
-  const { email, password, full_name, role, phone } = req.body;
+  const { email, password, full_name, role, phone, country, provider_type, rnc, personal_id } = req.body;
+
+  // Validate required fields
+  if (!country) {
+    throw new AppError('Country is required', 400);
+  }
 
   // Check if user already exists
   const existing = await db.query('SELECT id FROM users WHERE email = ?', [email]);
@@ -16,18 +21,34 @@ async function register(req, res) {
     throw new AppError('Email is already registered', 409);
   }
 
+  // Validate provider-specific fields
+  if (role === 'provider') {
+    if (!provider_type || !['Person', 'Company'].includes(provider_type)) {
+      throw new AppError('Provider type must be either "Person" or "Company"', 400);
+    }
+    if (provider_type === 'Company' && !rnc) {
+      throw new AppError('RNC (Company ID) is required for Company providers', 400);
+    }
+    if (provider_type === 'Person' && !personal_id) {
+      throw new AppError('Personal ID is required for Person providers', 400);
+    }
+  }
+
   const passwordHash = await bcrypt.hash(password, 12);
 
   const result = await db.query(
-    'INSERT INTO users (email, password_hash, full_name, role, phone) VALUES (?, ?, ?, ?, ?)',
-    [email, passwordHash, full_name, role, phone || null]
+    'INSERT INTO users (email, password_hash, full_name, role, phone, country) VALUES (?, ?, ?, ?, ?, ?)',
+    [email, passwordHash, full_name, role, phone || null, country]
   );
 
   const userId = result.insertId;
 
-  // If provider, create profile record
+  // If provider, create profile record with provider type and ID fields
   if (role === 'provider') {
-    await db.query('INSERT INTO provider_profiles (user_id) VALUES (?)', [userId]);
+    await db.query(
+      'INSERT INTO provider_profiles (user_id, provider_type, rnc, personal_id) VALUES (?, ?, ?, ?)',
+      [userId, provider_type, rnc || null, personal_id || null]
+    );
   }
 
   // Create rating summary
@@ -39,7 +60,7 @@ async function register(req, res) {
   res.status(201).json({
     message: t('messages.registrationSuccessful', {}, language),
     token,
-    user: { id: userId, email, full_name, role },
+    user: { id: userId, email, full_name, role, country },
   });
 }
 
@@ -50,7 +71,7 @@ async function login(req, res) {
   const { email, password } = req.body;
 
   const [user] = await db.query(
-    'SELECT id, email, password_hash, full_name, role, is_active FROM users WHERE email = ?',
+    'SELECT id, email, password_hash, full_name, role, country, is_active FROM users WHERE email = ?',
     [email]
   );
 
@@ -78,6 +99,7 @@ async function login(req, res) {
       email: user.email,
       full_name: user.full_name,
       role: user.role,
+      country: user.country,
     },
   });
 }
@@ -89,7 +111,7 @@ async function getProfile(req, res) {
   const userId = req.user.id;
 
   const [user] = await db.query(
-    `SELECT u.id, u.email, u.full_name, u.phone, u.role, u.avatar_url, u.created_at,
+    `SELECT u.id, u.email, u.full_name, u.phone, u.role, u.avatar_url, u.country, u.created_at,
             urs.average_rating, urs.total_ratings
      FROM users u
      LEFT JOIN user_rating_summary urs ON urs.user_id = u.id

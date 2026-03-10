@@ -487,11 +487,29 @@ async function uploadOrderMedia(req, res) {
 }
 
 /**
- * Get all service categories
+ * Get all service categories filtered by country
+ * Country can be provided as query parameter or from authenticated user's profile
+ * If no country is provided, defaults to 'DR'
  */
 async function getServiceCategories(req, res) {
+  let country = req.query.country;
+  
+  // If no country in query and user is authenticated, get from user profile
+  if (!country && req.user) {
+    const [user] = await db.query('SELECT country FROM users WHERE id = ?', [req.user.id]);
+    if (user && user.country) {
+      country = user.country;
+    }
+  }
+  
+  // Default to 'DR' if no country is provided
+  if (!country) {
+    country = 'DR';
+  }
+  
   const categories = await db.query(
-    'SELECT * FROM service_categories WHERE is_active = 1 ORDER BY sort_order'
+    'SELECT * FROM service_categories WHERE is_active = 1 AND country = ? ORDER BY sort_order',
+    [country]
   );
   res.json({ categories });
 }

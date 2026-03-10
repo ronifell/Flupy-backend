@@ -19,6 +19,7 @@ const ratingRoutes = require('./routes/rating.routes');
 const membershipRoutes = require('./routes/membership.routes');
 const addressRoutes = require('./routes/address.routes');
 const aiRoutes = require('./routes/ai.routes');
+const serviceRoutes = require('./routes/service.routes');
 
 // ── Express App ─────────────────────────────────────────────
 const app = express();
@@ -91,6 +92,7 @@ app.use('/api/ratings', ratingRoutes);
 app.use('/api/membership', membershipRoutes);
 app.use('/api/addresses', addressRoutes);
 app.use('/api/ai', aiRoutes);
+app.use('/api/services', serviceRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
