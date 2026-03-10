@@ -35,8 +35,9 @@ async function assignProvider(orderId) {
   });
 
   // Diagnostic: Check available providers (without distance/radius filter)
-  const [allProviders] = await db.query(
+  const allProviders = await db.query(
     `SELECT 
+      pp.id,
       pp.user_id,
       pp.is_available,
       pp.is_verified,
@@ -49,20 +50,39 @@ async function assignProvider(orderId) {
     FROM provider_profiles pp
     LEFT JOIN provider_services ps ON ps.provider_id = pp.id
     WHERE pp.user_id != ?
-    GROUP BY pp.user_id`,
+    GROUP BY pp.id, pp.user_id`,
     [order.customer_id]
   );
   
-  console.log(`[Assignment] All providers status:`, allProviders.map(p => ({
-    user_id: p.user_id,
-    is_available: p.is_available,
-    is_verified: p.is_verified,
-    membership_status: p.membership_status,
-    has_location: !!(p.current_lat && p.current_lng),
-    location_age_minutes: p.minutes_since_location_update,
-    offers_service: p.offered_services ? p.offered_services.split(',').includes(String(order.service_id)) : false,
-    offered_services: p.offered_services,
-  })));
+  console.log(`[Assignment] Total providers in system: ${allProviders.length}`);
+  console.log(`[Assignment] All providers status:`, allProviders.map(p => {
+    const offersService = p.offered_services ? p.offered_services.split(',').includes(String(order.service_id)) : false;
+    const hasLocation = !!(p.current_lat && p.current_lng);
+    const locationRecent = p.location_updated_at ? (p.minutes_since_location_update <= 30) : false;
+    const eligible = p.is_available === 1 && p.is_verified === 1 && p.membership_status === 'active' && offersService && hasLocation && locationRecent;
+    
+    return {
+      provider_id: p.id,
+      user_id: p.user_id,
+      is_available: p.is_available,
+      is_verified: p.is_verified,
+      membership_status: p.membership_status,
+      has_location: hasLocation,
+      location_age_minutes: p.minutes_since_location_update,
+      location_recent: locationRecent,
+      offers_service: offersService,
+      offered_services: p.offered_services,
+      ELIGIBLE: eligible,
+      rejection_reasons: [
+        p.is_available !== 1 && 'not_available',
+        p.is_verified !== 1 && 'not_verified',
+        p.membership_status !== 'active' && 'no_active_membership',
+        !offersService && 'doesnt_offer_service',
+        !hasLocation && 'no_location',
+        !locationRecent && 'location_too_old'
+      ].filter(Boolean)
+    };
+  }));
 
   let attemptNumber = 0;
 
@@ -73,6 +93,7 @@ async function assignProvider(orderId) {
     const candidates = await db.query(
       `SELECT
          pp.user_id as provider_id,
+         pp.id as provider_profile_id,
          pp.current_lat,
          pp.current_lng,
          urs.average_rating,
@@ -90,6 +111,7 @@ async function assignProvider(orderId) {
          AND ps.service_id = ?
          AND pp.current_lat IS NOT NULL
          AND pp.current_lng IS NOT NULL
+         AND pp.location_updated_at IS NOT NULL
          AND pp.location_updated_at > DATE_SUB(NOW(), INTERVAL 30 MINUTE)
          AND pp.user_id != ?
          AND ST_Distance_Sphere(
@@ -109,6 +131,16 @@ async function assignProvider(orderId) {
         radiusKm,
       ]
     );
+    
+    console.log(`[Assignment] Radius ${radiusKm}km: Found ${candidates.length} eligible candidates`);
+    if (candidates.length > 0) {
+      console.log(`[Assignment] Candidates:`, candidates.map(c => ({
+        provider_id: c.provider_id,
+        distance_km: c.distance_km?.toFixed(2),
+        rating: c.average_rating,
+        rating_count: c.total_ratings
+      })));
+    }
 
     // Record attempt
     const attemptResult = await db.query(
