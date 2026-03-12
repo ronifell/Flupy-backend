@@ -193,49 +193,43 @@ async function uploadDocument(req, res) {
     [profile.id, document_type || 'General', url]
   );
 
-  // Auto-approve and verify in development/testing mode
-  const isDevelopment = process.env.NODE_ENV !== 'production';
+  // Auto-approve the document and verify provider
+  const [insertedDoc] = await db.query(
+    `SELECT id FROM provider_documents 
+     WHERE provider_id = ? AND document_url = ? 
+     ORDER BY id DESC LIMIT 1`,
+    [profile.id, url]
+  );
   
-  if (isDevelopment) {
+  if (insertedDoc && insertedDoc.id) {
     // Auto-approve the document
-    const [insertedDoc] = await db.query(
-      `SELECT id FROM provider_documents 
-       WHERE provider_id = ? AND document_url = ? 
-       ORDER BY id DESC LIMIT 1`,
-      [profile.id, url]
+    await db.query(
+      `UPDATE provider_documents 
+       SET status = 'approved', reviewed_at = NOW() 
+       WHERE id = ?`,
+      [insertedDoc.id]
     );
     
-    if (insertedDoc && insertedDoc.id) {
-      await db.query(
-        `UPDATE provider_documents 
-         SET status = 'approved', reviewed_at = NOW() 
-         WHERE id = ?`,
-        [insertedDoc.id]
-      );
-      
-      // Auto-verify the provider
-      await db.query(
-        `UPDATE provider_profiles 
-         SET is_verified = 1 
-         WHERE id = ?`,
-        [profile.id]
-      );
-      
-      // Auto-set availability if provider has active membership
-      await updateAvailabilityIfEligible(profile.id);
-      
-      console.log(`[Upload Document] DEV MODE: Document auto-approved and provider ${userId} auto-verified`);
-    }
+    // Auto-verify the provider
+    await db.query(
+      `UPDATE provider_profiles 
+       SET is_verified = 1 
+       WHERE id = ?`,
+      [profile.id]
+    );
+    
+    // Auto-set availability if provider has active membership
+    await updateAvailabilityIfEligible(profile.id);
+    
+    console.log(`[Upload Document] Document auto-approved and provider ${userId} auto-verified`);
   }
 
   console.log(`[Upload Document] Document uploaded successfully for user ${userId}, document_id: ${profile.id}, url: ${url}`);
 
   res.json({ 
-    message: isDevelopment 
-      ? 'Document uploaded and approved (dev mode)' 
-      : 'Document uploaded for verification',
+    message: 'Document uploaded and approved',
     document_url: url,
-    auto_verified: isDevelopment 
+    auto_verified: true
   });
 }
 

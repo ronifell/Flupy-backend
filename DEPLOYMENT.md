@@ -44,7 +44,7 @@ Windows 10/11 comes with SSH client. Open **PowerShell** or **Command Prompt**:
 **🖥️ WINDOWS (PowerShell):**
 ```powershell
 ssh username@your-vps-ip
-# Example: ssh root@123.45.67.89
+# Example: ssh root@5.183.9.144
 ```
 
 **OR using PuTTY:**
