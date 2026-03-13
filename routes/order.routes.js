@@ -37,6 +37,12 @@ router.post('/:id/accept', authorize('provider'), idParam, validate, asyncHandle
 // Provider: decline order (triggers reassignment)
 router.post('/:id/decline', authorize('provider'), idParam, validate, asyncHandler(orderController.declineOrder));
 
+// Customer: search nearby providers
+router.get('/:id/providers', authorize('customer'), idParam, validate, asyncHandler(orderController.searchNearbyProviders));
+
+// Customer: approve provider and start service
+router.post('/:id/approve', authorize('customer'), idParam, validate, asyncHandler(orderController.approveProvider));
+
 // Provider: start order
 router.post('/:id/start', authorize('provider'), idParam, validate, asyncHandler(orderController.startOrder));
 

@@ -288,4 +288,120 @@ async function assignProvider(orderId) {
   return null;
 }
 
-module.exports = { assignProvider };
+/**
+ * Search for nearby providers without assigning them
+ * Returns a list of eligible providers sorted by rating and distance
+ */
+async function searchNearbyProviders(orderId, maxRadiusKm = 20) {
+  // Fetch order details
+  const [order] = await db.query(
+    'SELECT * FROM service_orders WHERE id = ? AND status = ?',
+    [orderId, 'SEARCHING']
+  );
+
+  if (!order) {
+    throw new Error('Order not found or not in SEARCHING status');
+  }
+
+  // Use the same search logic as assignProvider but return all candidates
+  const candidates = await db.query(
+    `SELECT
+       pp.user_id as provider_id,
+       pp.id as provider_profile_id,
+       u.full_name as provider_name,
+       u.phone as provider_phone,
+       pp.current_lat,
+       pp.current_lng,
+       pp.location_updated_at,
+       urs.average_rating,
+       urs.total_ratings,
+       -- Calculate distance from current GPS if available and recent
+       CASE 
+         WHEN pp.current_lat IS NOT NULL 
+           AND pp.current_lng IS NOT NULL 
+           AND pp.location_updated_at IS NOT NULL
+           AND pp.location_updated_at > DATE_SUB(NOW(), INTERVAL 30 MINUTE)
+         THEN ST_Distance_Sphere(
+           POINT(pp.current_lng, pp.current_lat),
+           POINT(?, ?)
+         ) / 1000
+         -- Otherwise use closest address
+         ELSE (
+           SELECT MIN(ST_Distance_Sphere(
+             POINT(ua.longitude, ua.latitude),
+             POINT(?, ?)
+           ) / 1000)
+           FROM user_addresses ua
+           WHERE ua.user_id = pp.user_id
+         )
+       END AS distance_km,
+       -- Determine which location is being used
+       CASE 
+         WHEN pp.current_lat IS NOT NULL 
+           AND pp.current_lng IS NOT NULL 
+           AND pp.location_updated_at IS NOT NULL
+           AND pp.location_updated_at > DATE_SUB(NOW(), INTERVAL 30 MINUTE)
+         THEN 'gps'
+         ELSE 'address'
+       END AS location_type
+     FROM provider_profiles pp
+     JOIN provider_services ps ON ps.provider_id = pp.id
+     JOIN users u ON u.id = pp.user_id
+     LEFT JOIN user_rating_summary urs ON urs.user_id = pp.user_id
+     WHERE pp.is_available = 1
+       AND pp.is_verified = 1
+       AND pp.membership_status = 'active'
+       AND ps.service_id = ?
+       AND pp.user_id != ?
+       -- Must have either recent GPS location OR at least one stored address
+       AND (
+         (pp.current_lat IS NOT NULL 
+          AND pp.current_lng IS NOT NULL 
+          AND pp.location_updated_at IS NOT NULL
+          AND pp.location_updated_at > DATE_SUB(NOW(), INTERVAL 30 MINUTE))
+         OR EXISTS (
+           SELECT 1 FROM user_addresses ua WHERE ua.user_id = pp.user_id
+         )
+       )
+       -- Distance check: either GPS or closest address must be within radius
+       AND (
+         -- GPS location within radius
+         (pp.current_lat IS NOT NULL 
+          AND pp.current_lng IS NOT NULL 
+          AND pp.location_updated_at IS NOT NULL
+          AND pp.location_updated_at > DATE_SUB(NOW(), INTERVAL 30 MINUTE)
+          AND ST_Distance_Sphere(
+            POINT(pp.current_lng, pp.current_lat),
+            POINT(?, ?)
+          ) / 1000 <= ?)
+         -- OR closest address within radius
+         OR (
+           SELECT MIN(ST_Distance_Sphere(
+             POINT(ua.longitude, ua.latitude),
+             POINT(?, ?)
+           ) / 1000)
+           FROM user_addresses ua
+           WHERE ua.user_id = pp.user_id
+         ) <= ?
+       )
+     ORDER BY
+       urs.average_rating DESC,
+       urs.total_ratings DESC,
+       distance_km ASC
+     LIMIT 20`,
+    [
+      order.longitude, order.latitude,  // For GPS distance calculation
+      order.longitude, order.latitude,  // For address distance calculation
+      order.service_id,
+      order.customer_id,
+      order.longitude, order.latitude,  // For GPS radius check
+      maxRadiusKm,                      // GPS radius
+      order.longitude, order.latitude,  // For address radius check
+      maxRadiusKm,                      // Address radius
+    ]
+  );
+
+  return candidates;
+}
+
+module.exports = { assignProvider, searchNearbyProviders };

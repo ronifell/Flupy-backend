@@ -57,10 +57,7 @@ async function createOrder(req, res) {
 
     await conn.commit();
 
-    // Trigger assignment engine asynchronously
-    assignmentService.assignProvider(orderId).catch((err) => {
-      console.error(`Assignment failed for order ${orderId}:`, err.message);
-    });
+    // Note: Provider assignment is now manual - customer must search and approve providers
 
     const language = req.language || 'en';
     res.status(201).json({
@@ -361,7 +358,136 @@ async function declineOrder(req, res) {
 }
 
 /**
+ * Customer approves a provider and starts the service
+ * This assigns the provider and changes status to ASSIGNED, then immediately to IN_PROGRESS
+ */
+async function approveProvider(req, res) {
+  const orderId = req.params.id;
+  const customerId = req.user.id;
+  const { provider_id } = req.body;
+
+  if (!provider_id) {
+    throw new AppError('Provider ID is required', 400);
+  }
+
+  // Get the order and verify it belongs to the customer
+  const [order] = await db.query(
+    'SELECT * FROM service_orders WHERE id = ? AND customer_id = ?',
+    [orderId, customerId]
+  );
+
+  if (!order) {
+    throw new AppError('Order not found', 404);
+  }
+
+  // Verify order is in SEARCHING status
+  if (order.status !== 'SEARCHING') {
+    throw new AppError(`Cannot approve provider for order with status: ${order.status}`, 400);
+  }
+
+  // Verify provider exists and offers this service
+  const [profile] = await db.query(
+    'SELECT id FROM provider_profiles WHERE user_id = ?',
+    [provider_id]
+  );
+
+  if (!profile) {
+    throw new AppError('Provider profile not found', 404);
+  }
+
+  const [providerService] = await db.query(
+    'SELECT * FROM provider_services WHERE provider_id = ? AND service_id = ?',
+    [profile.id, order.service_id]
+  );
+
+  if (!providerService) {
+    throw new AppError('Provider does not offer this service', 400);
+  }
+
+  // Assign provider and start service
+  await db.query(
+    `UPDATE service_orders 
+     SET provider_id = ?, status = 'ASSIGNED', assigned_at = NOW() 
+     WHERE id = ?`,
+    [provider_id, orderId]
+  );
+
+  // Create or reactivate conversation
+  const [existingConv] = await db.query(
+    'SELECT id FROM order_conversations WHERE order_id = ?',
+    [orderId]
+  );
+
+  if (existingConv) {
+    // Update existing conversation
+    await db.query(
+      `UPDATE order_conversations 
+       SET provider_id = ?, is_active = 1 
+       WHERE order_id = ?`,
+      [provider_id, orderId]
+    );
+  } else {
+    // Create new conversation
+    await db.query(
+      `INSERT INTO order_conversations (order_id, customer_id, provider_id)
+       VALUES (?, ?, ?)`,
+      [orderId, customerId, provider_id]
+    );
+  }
+
+  // Immediately start the service (customer approval = service start)
+  await db.query(
+    `UPDATE service_orders SET status = 'IN_PROGRESS', started_at = NOW() WHERE id = ?`,
+    [orderId]
+  );
+
+  // Notify provider
+  const language = req.language || 'en';
+  notificationService.sendToUser(provider_id, {
+    title: t('notifications.orderApproved.title', {}, language),
+    body: t('notifications.orderApproved.body', {}, language),
+    data: { type: 'order_approved', order_id: orderId },
+  });
+
+  res.json({ 
+    message: t('messages.providerApproved', {}, language), 
+    status: 'IN_PROGRESS' 
+  });
+}
+
+/**
+ * Search for nearby providers for an order
+ */
+async function searchNearbyProviders(req, res) {
+  const orderId = req.params.id;
+  const customerId = req.user.id;
+  const { max_radius_km } = req.query;
+
+  // Verify order belongs to customer
+  const [order] = await db.query(
+    'SELECT * FROM service_orders WHERE id = ? AND customer_id = ?',
+    [orderId, customerId]
+  );
+
+  if (!order) {
+    throw new AppError('Order not found', 404);
+  }
+
+  if (order.status !== 'SEARCHING') {
+    throw new AppError('Can only search providers for orders in SEARCHING status', 400);
+  }
+
+  const providers = await assignmentService.searchNearbyProviders(
+    orderId,
+    max_radius_km ? parseInt(max_radius_km) : 20
+  );
+
+  res.json({ providers });
+}
+
+/**
  * Provider starts working on order
+ * Note: Service should already be started via customer approval, but keeping this for backward compatibility
  */
 async function startOrder(req, res) {
   const orderId = req.params.id;
@@ -373,7 +499,7 @@ async function startOrder(req, res) {
   );
 
   if (!order) {
-    throw new AppError('Order not found or cannot be started', 404);
+    throw new AppError('Order not found or cannot be started. Service must be approved by customer first.', 404);
   }
 
   await db.query(
@@ -521,6 +647,8 @@ module.exports = {
   claimOrder,
   acceptOrder,
   declineOrder,
+  approveProvider,
+  searchNearbyProviders,
   startOrder,
   completeOrder,
   cancelOrder,
