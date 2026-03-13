@@ -10,6 +10,9 @@ router.use(authenticate);
 // Get conversation for an order
 router.get('/order/:orderId', asyncHandler(chatController.getConversation));
 
+// Get or create conversation with a provider (for customers, not tied to an order)
+router.get('/provider/:providerId', asyncHandler(chatController.getOrCreateProviderConversation));
+
 // Get messages for a conversation
 router.get('/:conversationId/messages', asyncHandler(chatController.getMessages));
 

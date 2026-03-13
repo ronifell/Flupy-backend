@@ -140,4 +140,71 @@ async function sendMessage(req, res) {
   res.status(201).json({ message: t('messages.messageSent', {}, language), message_id: messageId });
 }
 
-module.exports = { getConversation, getMessages, sendMessage };
+/**
+ * Get or create a conversation between customer and provider (not tied to an order)
+ */
+async function getOrCreateProviderConversation(req, res) {
+  const providerId = req.params.providerId;
+  const customerId = req.user.id;
+
+  if (req.user.role !== 'customer') {
+    throw new AppError('Only customers can initiate conversations with providers', 403);
+  }
+
+  // Check if provider exists
+  const [provider] = await db.query(
+    'SELECT id FROM provider_profiles WHERE user_id = ?',
+    [providerId]
+  );
+
+  if (!provider) {
+    throw new AppError('Provider not found', 404);
+  }
+
+  // Check if there's an existing conversation without an order (direct chat)
+  // Prefer conversations without order_id, but also check for any active conversation
+  let [conversation] = await db.query(
+    `SELECT oc.*, u_cust.full_name as customer_name, u_prov.full_name as provider_name
+     FROM order_conversations oc
+     JOIN users u_cust ON u_cust.id = oc.customer_id
+     JOIN users u_prov ON u_prov.id = oc.provider_id
+     WHERE oc.customer_id = ? AND oc.provider_id = ? AND oc.is_active = 1
+       AND oc.order_id IS NULL
+     ORDER BY oc.created_at DESC
+     LIMIT 1`,
+    [customerId, providerId]
+  );
+
+  // If no conversation exists, create one (with NULL order_id)
+  // Note: Schema needs to allow NULL order_id. If migration hasn't been run, this will fail.
+  if (!conversation) {
+    try {
+      const result = await db.query(
+        `INSERT INTO order_conversations (order_id, customer_id, provider_id, is_active)
+         VALUES (NULL, ?, ?, 1)`,
+        [customerId, providerId]
+      );
+
+      // Fetch the created conversation
+      [conversation] = await db.query(
+        `SELECT oc.*, u_cust.full_name as customer_name, u_prov.full_name as provider_name
+         FROM order_conversations oc
+         JOIN users u_cust ON u_cust.id = oc.customer_id
+         JOIN users u_prov ON u_prov.id = oc.provider_id
+         WHERE oc.id = ?`,
+        [result.insertId]
+      );
+    } catch (error) {
+      // If order_id cannot be NULL, provide helpful error message
+      if (error.code === 'ER_BAD_NULL_ERROR' || error.message.includes('NULL') || error.code === 'ER_NO_DEFAULT_FOR_FIELD') {
+        console.error('Schema migration needed: order_id in order_conversations must allow NULL');
+        throw new AppError('Direct messaging feature requires database update. Please run migration to allow NULL order_id.', 500);
+      }
+      throw error;
+    }
+  }
+
+  res.json({ conversation });
+}
+
+module.exports = { getConversation, getMessages, sendMessage, getOrCreateProviderConversation };
