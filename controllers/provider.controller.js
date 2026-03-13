@@ -817,6 +817,64 @@ async function reviewDocument(req, res) {
   });
 }
 
+/**
+ * Get public provider profile (for customers to view)
+ */
+async function getPublicProfile(req, res) {
+  const providerId = req.params.id; // This is user_id, not provider_profile.id
+
+  // Get provider profile by user_id
+  const [profile] = await db.query(
+    `SELECT pp.*, u.full_name, u.email, u.phone, u.avatar_url,
+            urs.average_rating, urs.total_ratings
+     FROM provider_profiles pp
+     JOIN users u ON u.id = pp.user_id
+     LEFT JOIN user_rating_summary urs ON urs.user_id = pp.user_id
+     WHERE pp.user_id = ?`,
+    [providerId]
+  );
+
+  if (!profile) {
+    throw new AppError('Provider profile not found', 404);
+  }
+
+  // Get services
+  const services = await db.query(
+    `SELECT sc.id, sc.name, sc.slug, sc.icon_url
+     FROM provider_services ps
+     JOIN service_categories sc ON sc.id = ps.service_id
+     WHERE ps.provider_id = ?`,
+    [profile.id]
+  );
+
+  // Get recent ratings (last 10)
+  const ratings = await db.query(
+    `SELECT r.rating, r.comment, r.created_at, u.full_name as customer_name
+     FROM order_ratings r
+     JOIN users u ON u.id = r.rater_id
+     WHERE r.rated_id = ? AND r.rater_id != ?
+     ORDER BY r.created_at DESC
+     LIMIT 10`,
+    [providerId, providerId]
+  );
+
+  res.json({ 
+    profile: {
+      user_id: profile.user_id,
+      full_name: profile.full_name,
+      phone: profile.phone,
+      avatar_url: profile.avatar_url,
+      bio: profile.bio,
+      is_verified: profile.is_verified,
+      membership_status: profile.membership_status,
+      average_rating: profile.average_rating,
+      total_ratings: profile.total_ratings,
+    },
+    services,
+    ratings 
+  });
+}
+
 module.exports = {
   getProfile,
   updateProfile,
@@ -827,5 +885,6 @@ module.exports = {
   getDashboard,
   reviewDocument,
   searchCustomers,
+  getPublicProfile,
   updateAvailabilityIfEligible, // Export helper for use in other controllers
 };

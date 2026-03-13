@@ -6,7 +6,10 @@ const { uploadSingle } = require('../middleware/upload');
 const { validate, appointmentResponseRules, idParam } = require('../utils/validators');
 const providerController = require('../controllers/provider.controller');
 
-// All routes require provider auth
+// Public route: Get provider profile (for customers to view)
+router.get('/:id/profile', idParam, validate, asyncHandler(providerController.getPublicProfile));
+
+// All other routes require provider auth
 router.use(authenticate, authorize('provider'));
 
 // Profile
