@@ -380,26 +380,28 @@ async function searchNearbyProviders(orderId, maxRadiusKm = 20) {
        pp.location_updated_at,
        urs.average_rating,
        urs.total_ratings,
-       -- Calculate distance from current GPS if available and recent
-       CASE 
-         WHEN pp.current_lat IS NOT NULL 
-           AND pp.current_lng IS NOT NULL 
-           AND pp.location_updated_at IS NOT NULL
-           AND pp.location_updated_at > DATE_SUB(NOW(), INTERVAL 30 MINUTE)
-         THEN ST_Distance_Sphere(
-           POINT(pp.current_lng, pp.current_lat),
-           POINT(?, ?)
-         ) / 1000
-         -- Otherwise use closest address
-         ELSE COALESCE((
+       -- Calculate distance from current GPS if available and recent, otherwise use closest address
+       COALESCE(
+         CASE 
+           WHEN pp.current_lat IS NOT NULL 
+             AND pp.current_lng IS NOT NULL 
+             AND pp.location_updated_at IS NOT NULL
+             AND pp.location_updated_at > DATE_SUB(NOW(), INTERVAL 30 MINUTE)
+           THEN ST_Distance_Sphere(
+             POINT(pp.current_lng, pp.current_lat),
+             POINT(?, ?)
+           ) / 1000
+           ELSE NULL
+         END,
+         (
            SELECT MIN(ST_Distance_Sphere(
              POINT(ua.longitude, ua.latitude),
              POINT(?, ?)
            ) / 1000)
            FROM user_addresses ua
            WHERE ua.user_id = pp.user_id
-         ), 999999)
-       END AS distance_km,
+         )
+       ) AS distance_km,
        -- Determine which location is being used
        CASE 
          WHEN pp.current_lat IS NOT NULL 
@@ -429,9 +431,9 @@ async function searchNearbyProviders(orderId, maxRadiusKm = 20) {
          )
        )
        -- Distance check: either GPS or closest address must be within radius
-       -- Fixed: Properly handle NULL values and check both GPS and address distances
+       -- Fixed: Check both GPS and address distances properly
        AND (
-         -- GPS location within radius (if GPS is recent)
+         -- Option 1: GPS location is recent AND within radius
          (pp.current_lat IS NOT NULL 
           AND pp.current_lng IS NOT NULL 
           AND pp.location_updated_at IS NOT NULL
@@ -440,17 +442,16 @@ async function searchNearbyProviders(orderId, maxRadiusKm = 20) {
             POINT(pp.current_lng, pp.current_lat),
             POINT(?, ?)
           ) / 1000 <= ?)
-         -- OR closest address within radius (if address exists and no recent GPS, or GPS is outside radius)
-         OR (
-           EXISTS (SELECT 1 FROM user_addresses ua WHERE ua.user_id = pp.user_id)
-           AND (
-             SELECT MIN(ST_Distance_Sphere(
+         -- Option 2: Provider has addresses AND closest address is within radius
+         -- (This applies even if GPS exists but is outside radius or not recent)
+         OR EXISTS (
+           SELECT 1
+           FROM user_addresses ua
+           WHERE ua.user_id = pp.user_id
+             AND ST_Distance_Sphere(
                POINT(ua.longitude, ua.latitude),
                POINT(?, ?)
-             ) / 1000)
-             FROM user_addresses ua
-             WHERE ua.user_id = pp.user_id
-           ) <= ?
+             ) / 1000 <= ?
          )
        )
      ORDER BY
@@ -470,10 +471,40 @@ async function searchNearbyProviders(orderId, maxRadiusKm = 20) {
     ]
   );
 
-  console.log(`[SearchProviders] Found ${candidates.length} providers`);
+  console.log(`[SearchProviders] Query returned ${candidates.length} providers`);
   if (candidates.length > 0) {
-    console.log(`[SearchProviders] Provider IDs: ${candidates.map(c => c.provider_id).join(', ')}`);
+    console.log(`[SearchProviders] Provider IDs found: ${candidates.map(c => c.provider_id).join(', ')}`);
+    candidates.forEach(c => {
+      console.log(`[SearchProviders] - Provider ${c.provider_id} (${c.provider_name}): distance=${c.distance_km}km, location_type=${c.location_type}`);
+    });
+  } else {
+    console.log(`[SearchProviders] WARNING: No providers found! Check diagnostic output above.`);
   }
+
+  // Additional diagnostic: Check what providers would be found if we relaxed the filters
+  const allProvidersWithService = await db.query(
+    `SELECT DISTINCT
+      pp.user_id,
+      pp.id as provider_profile_id,
+      u.full_name,
+      pp.is_available,
+      pp.is_verified,
+      pp.membership_status,
+      GROUP_CONCAT(DISTINCT ps.service_id) as offered_services
+    FROM provider_profiles pp
+    JOIN provider_services ps ON ps.provider_id = pp.id
+    JOIN users u ON u.id = pp.user_id
+    WHERE ps.service_id = ?
+      AND pp.user_id != ?
+    GROUP BY pp.user_id, pp.id, u.full_name, pp.is_available, pp.is_verified, pp.membership_status`,
+    [order.service_id, order.customer_id]
+  );
+
+  console.log(`[SearchProviders] Total providers offering service ${order.service_id}: ${allProvidersWithService.length}`);
+  allProvidersWithService.forEach(p => {
+    const meetsCriteria = p.is_available === 1 && p.is_verified === 1 && p.membership_status === 'active';
+    console.log(`[SearchProviders] - Provider ${p.user_id} (${p.full_name}): available=${p.is_available}, verified=${p.is_verified}, membership=${p.membership_status}, MEETS_CRITERIA=${meetsCriteria}`);
+  });
 
   return candidates;
 }
