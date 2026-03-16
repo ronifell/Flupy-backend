@@ -21,7 +21,7 @@ const registerRules = [
   body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
   body('full_name').trim().notEmpty().withMessage('Full name is required'),
   body('role').isIn(['customer', 'provider']).withMessage('Role must be customer or provider'),
-  body('phone').optional().isMobilePhone().withMessage('Invalid phone number'),
+  body('phone').trim().notEmpty().withMessage('Phone number is required').isMobilePhone().withMessage('Invalid phone number'),
 ];
 
 const loginRules = [

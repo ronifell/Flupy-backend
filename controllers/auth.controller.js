@@ -38,7 +38,7 @@ async function register(req, res) {
 
   const result = await db.query(
     'INSERT INTO users (email, password_hash, full_name, role, phone, country) VALUES (?, ?, ?, ?, ?, ?)',
-    [email, passwordHash, full_name, role, phone || null, country]
+    [email, passwordHash, full_name, role, phone, country]
   );
 
   const userId = result.insertId;
