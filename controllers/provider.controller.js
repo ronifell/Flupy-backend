@@ -5,6 +5,33 @@ const notificationService = require('../services/notification.service');
 const { t } = require('../i18n');
 
 /**
+ * Helper function to check if provider has both required documents for verification
+ * Returns { hasIdDocument: boolean, hasProfilePicture: boolean, canVerify: boolean }
+ */
+async function checkVerificationRequirements(providerId) {
+  const allDocs = await db.query(
+    `SELECT document_type, is_profile_picture, status 
+     FROM provider_documents 
+     WHERE provider_id = ? AND status = 'approved'`,
+    [providerId]
+  );
+  
+  // Ensure allDocs is an array
+  const docsArray = Array.isArray(allDocs) ? allDocs : [];
+  
+  const hasIdDocument = docsArray.some(doc => 
+    (doc.document_type === 'ID' || doc.document_type === 'General') && doc.is_profile_picture === 0
+  );
+  const hasProfilePicture = docsArray.some(doc => doc.is_profile_picture === 1);
+  
+  return {
+    hasIdDocument,
+    hasProfilePicture,
+    canVerify: hasIdDocument && hasProfilePicture,
+  };
+}
+
+/**
  * Helper function to automatically set is_available = 1 when provider is verified and has active membership
  * Can accept either provider_id (from provider_profiles.id) or user_id
  */
@@ -83,13 +110,32 @@ async function getProfile(req, res) {
     [profile.id]
   );
 
-  // Check if provider has both ID document and profile picture for verification
-  const hasIdDocument = documents.some(doc => doc.document_type === 'ID' && doc.status === 'approved');
-  const hasProfilePicture = documents.some(doc => doc.is_profile_picture === 1 && doc.status === 'approved');
+  // Check verification requirements using helper function
+  const verificationStatus = await checkVerificationRequirements(profile.id);
+  
+  // Ensure verification status is correct (fix any inconsistencies)
+  if (profile.is_verified === 1 && !verificationStatus.canVerify) {
+    // Provider is marked as verified but doesn't have both documents - fix it
+    await db.query(
+      'UPDATE provider_profiles SET is_verified = 0 WHERE id = ?',
+      [profile.id]
+    );
+    profile.is_verified = 0;
+    console.log(`[Get Profile] Fixed verification status for provider ${userId} - missing required documents`);
+  } else if (profile.is_verified === 0 && verificationStatus.canVerify) {
+    // Provider has both documents but isn't verified - fix it
+    await db.query(
+      'UPDATE provider_profiles SET is_verified = 1 WHERE id = ?',
+      [profile.id]
+    );
+    profile.is_verified = 1;
+    console.log(`[Get Profile] Fixed verification status for provider ${userId} - has both required documents`);
+  }
+  
   profile.verification_requirements = {
-    has_id_document: hasIdDocument,
-    has_profile_picture: hasProfilePicture,
-    can_verify: hasIdDocument && hasProfilePicture,
+    has_id_document: verificationStatus.hasIdDocument,
+    has_profile_picture: verificationStatus.hasProfilePicture,
+    can_verify: verificationStatus.canVerify,
   };
 
   res.json({ profile, services, documents });
@@ -290,23 +336,10 @@ async function uploadDocument(req, res) {
     );
     
     // Check if provider has both ID document and profile picture for verification
-    const allDocs = await db.query(
-      `SELECT document_type, is_profile_picture, status 
-       FROM provider_documents 
-       WHERE provider_id = ? AND status = 'approved'`,
-      [profile.id]
-    );
-    
-    // Ensure allDocs is an array
-    const docsArray = Array.isArray(allDocs) ? allDocs : [];
-    
-    const hasIdDocument = docsArray.some(doc => 
-      (doc.document_type === 'ID' || doc.document_type === 'General') && doc.is_profile_picture === 0
-    );
-    const hasProfilePicture = docsArray.some(doc => doc.is_profile_picture === 1);
+    const verificationStatus = await checkVerificationRequirements(profile.id);
     
     // Auto-verify provider only if they have both ID and profile picture
-    if (hasIdDocument && hasProfilePicture) {
+    if (verificationStatus.canVerify) {
       await db.query(
         `UPDATE provider_profiles 
          SET is_verified = 1 
@@ -319,7 +352,15 @@ async function uploadDocument(req, res) {
       
       console.log(`[Upload Document] Provider ${userId} verified (has both ID and profile picture)`);
     } else {
-      console.log(`[Upload Document] Provider ${userId} needs both ID document and profile picture for verification`);
+      // Ensure provider is NOT verified if they don't have both documents
+      await db.query(
+        `UPDATE provider_profiles 
+         SET is_verified = 0 
+         WHERE id = ?`,
+        [profile.id]
+      );
+      
+      console.log(`[Upload Document] Provider ${userId} needs both ID document and profile picture for verification (ID: ${verificationStatus.hasIdDocument}, Profile Picture: ${verificationStatus.hasProfilePicture})`);
     }
   }
 
@@ -856,7 +897,7 @@ async function searchCustomers(req, res) {
 
 /**
  * Approve or reject provider verification document (Admin function)
- * When a document is approved, automatically set provider as verified if they have at least one approved document
+ * When a document is approved, automatically set provider as verified ONLY if they have BOTH ID document and profile picture approved
  */
 async function reviewDocument(req, res) {
   const documentId = req.params.id;
@@ -887,49 +928,32 @@ async function reviewDocument(req, res) {
     [status, documentId]
   );
 
-  // If approved, check if provider should be verified
-  if (status === 'approved') {
-    // Check if provider has at least one approved document
-    const [approvedDocs] = await db.query(
-      `SELECT COUNT(*) as count 
-       FROM provider_documents 
-       WHERE provider_id = ? AND status = 'approved'`,
+  // Check if provider has both ID document and profile picture for verification
+  const verificationStatus = await checkVerificationRequirements(document.provider_profile_id);
+
+  // Only verify if BOTH documents are present and approved
+  if (verificationStatus.canVerify) {
+    await db.query(
+      `UPDATE provider_profiles 
+       SET is_verified = 1 
+       WHERE id = ?`,
       [document.provider_profile_id]
     );
-
-    // Set provider as verified if they have at least one approved document
-    if (approvedDocs[0].count > 0) {
-      await db.query(
-        `UPDATE provider_profiles 
-         SET is_verified = 1 
-         WHERE id = ?`,
-        [document.provider_profile_id]
-      );
-      
-      // Auto-set availability if provider has active membership
-      await updateAvailabilityIfEligible(document.provider_profile_id);
-      
-      console.log(`[Review Document] Provider ${document.user_id} verified after document approval`);
-    }
+    
+    // Auto-set availability if provider has active membership
+    await updateAvailabilityIfEligible(document.provider_profile_id);
+    
+    console.log(`[Review Document] Provider ${document.user_id} verified (has both ID and profile picture)`);
   } else {
-    // If rejected, check if provider still has any approved documents
-    const [approvedDocs] = await db.query(
-      `SELECT COUNT(*) as count 
-       FROM provider_documents 
-       WHERE provider_id = ? AND status = 'approved'`,
+    // Unverify provider if they don't have both documents
+    await db.query(
+      `UPDATE provider_profiles 
+       SET is_verified = 0 
+       WHERE id = ?`,
       [document.provider_profile_id]
     );
-
-    // Unverify provider if they have no approved documents
-    if (approvedDocs[0].count === 0) {
-      await db.query(
-        `UPDATE provider_profiles 
-         SET is_verified = 0 
-         WHERE id = ?`,
-        [document.provider_profile_id]
-      );
-      console.log(`[Review Document] Provider ${document.user_id} unverified - no approved documents`);
-    }
+    
+    console.log(`[Review Document] Provider ${document.user_id} unverified - missing required documents (ID: ${verificationStatus.hasIdDocument}, Profile Picture: ${verificationStatus.hasProfilePicture})`);
   }
 
   const language = req.language || 'en';
