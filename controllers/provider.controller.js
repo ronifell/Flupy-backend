@@ -290,17 +290,20 @@ async function uploadDocument(req, res) {
     );
     
     // Check if provider has both ID document and profile picture for verification
-    const [allDocs] = await db.query(
+    const allDocs = await db.query(
       `SELECT document_type, is_profile_picture, status 
        FROM provider_documents 
        WHERE provider_id = ? AND status = 'approved'`,
       [profile.id]
     );
     
-    const hasIdDocument = allDocs.some(doc => 
+    // Ensure allDocs is an array
+    const docsArray = Array.isArray(allDocs) ? allDocs : [];
+    
+    const hasIdDocument = docsArray.some(doc => 
       (doc.document_type === 'ID' || doc.document_type === 'General') && doc.is_profile_picture === 0
     );
-    const hasProfilePicture = allDocs.some(doc => doc.is_profile_picture === 1);
+    const hasProfilePicture = docsArray.some(doc => doc.is_profile_picture === 1);
     
     // Auto-verify provider only if they have both ID and profile picture
     if (hasIdDocument && hasProfilePicture) {
@@ -323,7 +326,7 @@ async function uploadDocument(req, res) {
   console.log(`[Upload Document] Document uploaded successfully for user ${userId}, document_id: ${profile.id}, url: ${url}`);
 
   // Check verification status
-  const [verificationCheck] = await db.query(
+  const verificationCheck = await db.query(
     `SELECT 
        COUNT(CASE WHEN is_profile_picture = 0 AND status = 'approved' THEN 1 END) as id_docs,
        COUNT(CASE WHEN is_profile_picture = 1 AND status = 'approved' THEN 1 END) as profile_pics
@@ -332,7 +335,12 @@ async function uploadDocument(req, res) {
     [profile.id]
   );
 
-  const isVerified = verificationCheck[0].id_docs > 0 && verificationCheck[0].profile_pics > 0;
+  // Get first row from result array
+  const checkResult = Array.isArray(verificationCheck) && verificationCheck.length > 0 
+    ? verificationCheck[0] 
+    : { id_docs: 0, profile_pics: 0 };
+  
+  const isVerified = checkResult.id_docs > 0 && checkResult.profile_pics > 0;
 
   res.json({ 
     message: 'Document uploaded and approved',
@@ -340,8 +348,8 @@ async function uploadDocument(req, res) {
     is_profile_picture: isProfilePicture,
     auto_verified: isVerified,
     verification_status: {
-      has_id_document: verificationCheck[0].id_docs > 0,
-      has_profile_picture: verificationCheck[0].profile_pics > 0,
+      has_id_document: checkResult.id_docs > 0,
+      has_profile_picture: checkResult.profile_pics > 0,
       is_verified: isVerified,
     }
   });
