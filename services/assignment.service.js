@@ -305,6 +305,67 @@ async function searchNearbyProviders(orderId, maxRadiusKm = 20) {
 
   console.log(`[SearchProviders] Searching for order ${orderId}, service_id: ${order.service_id}, radius: ${maxRadiusKm}km`);
   console.log(`[SearchProviders] Order location: lat=${order.latitude}, lng=${order.longitude}`);
+  console.log(`[SearchProviders] Customer ID: ${order.customer_id}`);
+
+  // Diagnostic: Check all providers with addresses near the order location
+  const diagnosticProviders = await db.query(
+    `SELECT 
+      pp.user_id,
+      pp.id as provider_profile_id,
+      u.full_name,
+      pp.is_available,
+      pp.is_verified,
+      pp.membership_status,
+      pp.current_lat,
+      pp.current_lng,
+      pp.location_updated_at,
+      TIMESTAMPDIFF(MINUTE, pp.location_updated_at, NOW()) as minutes_since_location_update,
+      GROUP_CONCAT(DISTINCT ps.service_id) as offered_services,
+      COUNT(DISTINCT ua.id) as address_count,
+      MIN(ST_Distance_Sphere(
+        POINT(ua.longitude, ua.latitude),
+        POINT(?, ?)
+      ) / 1000) as min_address_distance_km
+    FROM provider_profiles pp
+    JOIN users u ON u.id = pp.user_id
+    LEFT JOIN provider_services ps ON ps.provider_id = pp.id
+    LEFT JOIN user_addresses ua ON ua.user_id = pp.user_id
+    WHERE pp.user_id != ?
+      AND (
+        (pp.current_lat IS NOT NULL AND pp.current_lng IS NOT NULL)
+        OR EXISTS (SELECT 1 FROM user_addresses ua2 WHERE ua2.user_id = pp.user_id)
+      )
+    GROUP BY pp.user_id, pp.id, u.full_name, pp.is_available, pp.is_verified, 
+             pp.membership_status, pp.current_lat, pp.current_lng, pp.location_updated_at
+    HAVING min_address_distance_km IS NOT NULL OR 
+           (pp.current_lat IS NOT NULL AND pp.current_lng IS NOT NULL)`,
+    [order.longitude, order.latitude, order.customer_id]
+  );
+
+  console.log(`[SearchProviders] Diagnostic: Found ${diagnosticProviders.length} providers with addresses near order location`);
+  diagnosticProviders.forEach(p => {
+    const hasRecentGPS = p.current_lat && p.current_lng && p.location_updated_at && p.minutes_since_location_update <= 30;
+    const offersService = p.offered_services ? p.offered_services.split(',').includes(String(order.service_id)) : false;
+    const eligible = p.is_available === 1 && p.is_verified === 1 && p.membership_status === 'active' && offersService;
+    
+    console.log(`[SearchProviders] Provider ${p.user_id} (${p.full_name}):`, {
+      is_available: p.is_available,
+      is_verified: p.is_verified,
+      membership_status: p.membership_status,
+      has_recent_gps: hasRecentGPS,
+      offers_service: offersService,
+      offered_services: p.offered_services,
+      address_count: p.address_count,
+      min_distance_km: p.min_address_distance_km,
+      ELIGIBLE: eligible,
+      rejection_reasons: [
+        p.is_available !== 1 && 'not_available',
+        p.is_verified !== 1 && 'not_verified',
+        p.membership_status !== 'active' && 'no_active_membership',
+        !offersService && 'doesnt_offer_service',
+      ].filter(Boolean)
+    });
+  });
 
   // Use the same search logic as assignProvider but return all candidates
   // Fixed: Handle NULL values properly and ensure all eligible providers are found
@@ -379,17 +440,17 @@ async function searchNearbyProviders(orderId, maxRadiusKm = 20) {
             POINT(pp.current_lng, pp.current_lat),
             POINT(?, ?)
           ) / 1000 <= ?)
-         -- OR closest address within radius (if address exists)
+         -- OR closest address within radius (if address exists and no recent GPS, or GPS is outside radius)
          OR (
            EXISTS (SELECT 1 FROM user_addresses ua WHERE ua.user_id = pp.user_id)
-           AND COALESCE((
+           AND (
              SELECT MIN(ST_Distance_Sphere(
                POINT(ua.longitude, ua.latitude),
                POINT(?, ?)
              ) / 1000)
              FROM user_addresses ua
              WHERE ua.user_id = pp.user_id
-           ), 999999) <= ?
+           ) <= ?
          )
        )
      ORDER BY
