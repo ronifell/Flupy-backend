@@ -36,17 +36,40 @@ async function createCheckoutSession(req, res) {
     );
   }
 
+  // Get plan type from request (default to 'basic' if not provided)
+  const { plan_type = 'basic' } = req.body;
+  
+  // Validate plan type
+  if (!['basic', 'professional', 'premium'].includes(plan_type)) {
+    throw new AppError('Invalid plan type. Must be basic, professional, or premium', 400);
+  }
+
+  // Map plan types to Stripe price IDs (you'll need to set these in your .env)
+  const priceIdMap = {
+    basic: process.env.STRIPE_BASIC_PRICE_ID || process.env.STRIPE_MONTHLY_PRICE_ID,
+    professional: process.env.STRIPE_PROFESSIONAL_PRICE_ID || process.env.STRIPE_MONTHLY_PRICE_ID,
+    premium: process.env.STRIPE_PREMIUM_PRICE_ID || process.env.STRIPE_MONTHLY_PRICE_ID,
+  };
+
+  const priceId = priceIdMap[plan_type];
+  if (!priceId) {
+    throw new AppError('Stripe price ID not configured for this plan', 500);
+  }
+
   const session = await stripe.checkout.sessions.create({
     customer: stripeCustomerId,
     payment_method_types: ['card'],
     mode: 'subscription',
     line_items: [{
-      price: process.env.STRIPE_MONTHLY_PRICE_ID,
+      price: priceId,
       quantity: 1,
     }],
     success_url: `${req.headers.origin || 'flupy://'}membership/success?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${req.headers.origin || 'flupy://'}membership/cancel`,
-    metadata: { flupy_user_id: userId.toString() },
+    metadata: { 
+      flupy_user_id: userId.toString(),
+      plan_type: plan_type,
+    },
   });
 
   res.json({ session_id: session.id, url: session.url });
@@ -59,7 +82,7 @@ async function getMembershipStatus(req, res) {
   const userId = req.user.id;
 
   const [profile] = await db.query(
-    'SELECT membership_status, membership_expires_at, stripe_subscription_id FROM provider_profiles WHERE user_id = ?',
+    'SELECT membership_status, membership_expires_at, stripe_subscription_id, subscription_plan FROM provider_profiles WHERE user_id = ?',
     [userId]
   );
 
@@ -71,6 +94,7 @@ async function getMembershipStatus(req, res) {
     status: profile.membership_status,
     expires_at: profile.membership_expires_at,
     has_subscription: !!profile.stripe_subscription_id,
+    plan: profile.subscription_plan || null,
   });
 }
 
@@ -115,12 +139,13 @@ async function handleWebhook(req, res) {
     case 'checkout.session.completed': {
       const session = event.data.object;
       const userId = session.metadata.flupy_user_id;
+      const planType = session.metadata.plan_type || 'basic';
       if (session.subscription) {
         await db.query(
           `UPDATE provider_profiles
-           SET stripe_subscription_id = ?, membership_status = 'active'
+           SET stripe_subscription_id = ?, membership_status = 'active', subscription_plan = ?
            WHERE user_id = ?`,
-          [session.subscription, userId]
+          [session.subscription, planType, userId]
         );
         
         // Auto-set availability if provider is verified

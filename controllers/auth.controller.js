@@ -54,6 +54,19 @@ async function register(req, res) {
   // Create rating summary
   await db.query('INSERT INTO user_rating_summary (user_id) VALUES (?)', [userId]);
 
+  // Handle blood donor network registration if provided (only for DR users)
+  const { blood_donor_registered, blood_type } = req.body;
+  if (country === 'DR' && blood_donor_registered && blood_type) {
+    const validBloodTypes = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
+    if (validBloodTypes.includes(blood_type)) {
+      await db.query(
+        `INSERT INTO blood_donor_network (user_id, is_registered, blood_type)
+         VALUES (?, 1, ?)`,
+        [userId, blood_type]
+      );
+    }
+  }
+
   const token = generateToken(userId, role);
   const language = req.language || 'en';
 

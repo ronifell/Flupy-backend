@@ -20,6 +20,7 @@ const membershipRoutes = require('./routes/membership.routes');
 const addressRoutes = require('./routes/address.routes');
 const aiRoutes = require('./routes/ai.routes');
 const serviceRoutes = require('./routes/service.routes');
+const bloodDonorRoutes = require('./routes/bloodDonor.routes');
 
 // ── Express App ─────────────────────────────────────────────
 const app = express();
@@ -93,6 +94,7 @@ app.use('/api/membership', membershipRoutes);
 app.use('/api/addresses', addressRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/services', serviceRoutes);
+app.use('/api/blood-donor', bloodDonorRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

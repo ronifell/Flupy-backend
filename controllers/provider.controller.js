@@ -52,6 +52,18 @@ async function getProfile(req, res) {
     [userId]
   );
 
+  // Calculate and update accreditation tier if not set or needs update
+  if (profile) {
+    const accreditationTier = calculateAccreditationTier(profile.created_at);
+    if (accreditationTier && profile.accreditation_tier !== accreditationTier) {
+      await db.query(
+        'UPDATE provider_profiles SET accreditation_tier = ? WHERE id = ?',
+        [accreditationTier, profile.id]
+      );
+      profile.accreditation_tier = accreditationTier;
+    }
+  }
+
   if (!profile) {
     throw new AppError('Provider profile not found', 404);
   }
@@ -67,11 +79,49 @@ async function getProfile(req, res) {
 
   // Get documents
   const documents = await db.query(
-    'SELECT id, document_type, document_url, status, created_at FROM provider_documents WHERE provider_id = ?',
+    'SELECT id, document_type, document_url, status, is_profile_picture, created_at FROM provider_documents WHERE provider_id = ?',
     [profile.id]
   );
 
+  // Check if provider has both ID document and profile picture for verification
+  const hasIdDocument = documents.some(doc => doc.document_type === 'ID' && doc.status === 'approved');
+  const hasProfilePicture = documents.some(doc => doc.is_profile_picture === 1 && doc.status === 'approved');
+  profile.verification_requirements = {
+    has_id_document: hasIdDocument,
+    has_profile_picture: hasProfilePicture,
+    can_verify: hasIdDocument && hasProfilePicture,
+  };
+
   res.json({ profile, services, documents });
+}
+
+/**
+ * Calculate accreditation tier based on provider's activity duration
+ */
+function calculateAccreditationTier(createdAt) {
+  if (!createdAt) return null;
+  
+  const now = new Date();
+  const created = new Date(createdAt);
+  const monthsActive = (now - created) / (1000 * 60 * 60 * 24 * 30); // Approximate months
+  
+  if (monthsActive >= 36) return '3_years';
+  if (monthsActive >= 12) return '1_year';
+  if (monthsActive >= 6) return '6_months';
+  if (monthsActive >= 3) return '3_months';
+  return null;
+}
+
+/**
+ * Get service limit based on subscription plan
+ */
+function getServiceLimit(plan) {
+  const limits = {
+    basic: 1,
+    professional: 3,
+    premium: null, // null means unlimited
+  };
+  return limits[plan] || limits.basic;
 }
 
 /**
@@ -82,7 +132,7 @@ async function updateProfile(req, res) {
   const { bio, services } = req.body;
 
   const [profile] = await db.query(
-    'SELECT id FROM provider_profiles WHERE user_id = ?',
+    'SELECT id, subscription_plan, created_at FROM provider_profiles WHERE user_id = ?',
     [userId]
   );
 
@@ -94,8 +144,19 @@ async function updateProfile(req, res) {
     await db.query('UPDATE provider_profiles SET bio = ? WHERE id = ?', [bio, profile.id]);
   }
 
-  // Update services (replace all)
+  // Update services (replace all) - enforce plan limits
   if (services && Array.isArray(services)) {
+    const plan = profile.subscription_plan || 'basic';
+    const serviceLimit = getServiceLimit(plan);
+    
+    if (serviceLimit !== null && services.length > serviceLimit) {
+      const planNames = { basic: 'Basic', professional: 'Professional', premium: 'Premium' };
+      throw new AppError(
+        `Your ${planNames[plan] || 'Basic'} plan allows only ${serviceLimit} service categor${serviceLimit === 1 ? 'y' : 'ies'}. Please upgrade to select more services.`,
+        400
+      );
+    }
+
     await db.query('DELETE FROM provider_services WHERE provider_id = ?', [profile.id]);
     for (const serviceId of services) {
       await db.query(
@@ -103,6 +164,15 @@ async function updateProfile(req, res) {
         [profile.id, serviceId]
       );
     }
+  }
+
+  // Update accreditation tier
+  const accreditationTier = calculateAccreditationTier(profile.created_at);
+  if (accreditationTier) {
+    await db.query(
+      'UPDATE provider_profiles SET accreditation_tier = ? WHERE id = ?',
+      [accreditationTier, profile.id]
+    );
   }
 
   const language = req.language || 'en';
@@ -185,15 +255,24 @@ async function uploadDocument(req, res) {
   }
 
   const url = buildFileUrl(req, req.file.filename);
+  const isProfilePicture = req.body.is_profile_picture === 'true' || req.body.is_profile_picture === true;
 
   // Insert document
   await db.query(
-    `INSERT INTO provider_documents (provider_id, document_type, document_url)
-     VALUES (?, ?, ?)`,
-    [profile.id, document_type || 'General', url]
+    `INSERT INTO provider_documents (provider_id, document_type, document_url, is_profile_picture)
+     VALUES (?, ?, ?, ?)`,
+    [profile.id, document_type || (isProfilePicture ? 'Profile Picture' : 'ID'), url, isProfilePicture ? 1 : 0]
   );
 
-  // Auto-approve the document and verify provider
+  // If it's a profile picture, also update provider_profiles
+  if (isProfilePicture) {
+    await db.query(
+      'UPDATE provider_profiles SET profile_picture_url = ? WHERE id = ?',
+      [url, profile.id]
+    );
+  }
+
+  // Auto-approve the document
   const [insertedDoc] = await db.query(
     `SELECT id FROM provider_documents 
      WHERE provider_id = ? AND document_url = ? 
@@ -210,26 +289,61 @@ async function uploadDocument(req, res) {
       [insertedDoc.id]
     );
     
-    // Auto-verify the provider
-    await db.query(
-      `UPDATE provider_profiles 
-       SET is_verified = 1 
-       WHERE id = ?`,
+    // Check if provider has both ID document and profile picture for verification
+    const [allDocs] = await db.query(
+      `SELECT document_type, is_profile_picture, status 
+       FROM provider_documents 
+       WHERE provider_id = ? AND status = 'approved'`,
       [profile.id]
     );
     
-    // Auto-set availability if provider has active membership
-    await updateAvailabilityIfEligible(profile.id);
+    const hasIdDocument = allDocs.some(doc => 
+      (doc.document_type === 'ID' || doc.document_type === 'General') && doc.is_profile_picture === 0
+    );
+    const hasProfilePicture = allDocs.some(doc => doc.is_profile_picture === 1);
     
-    console.log(`[Upload Document] Document auto-approved and provider ${userId} auto-verified`);
+    // Auto-verify provider only if they have both ID and profile picture
+    if (hasIdDocument && hasProfilePicture) {
+      await db.query(
+        `UPDATE provider_profiles 
+         SET is_verified = 1 
+         WHERE id = ?`,
+        [profile.id]
+      );
+      
+      // Auto-set availability if provider has active membership
+      await updateAvailabilityIfEligible(profile.id);
+      
+      console.log(`[Upload Document] Provider ${userId} verified (has both ID and profile picture)`);
+    } else {
+      console.log(`[Upload Document] Provider ${userId} needs both ID document and profile picture for verification`);
+    }
   }
 
   console.log(`[Upload Document] Document uploaded successfully for user ${userId}, document_id: ${profile.id}, url: ${url}`);
 
+  // Check verification status
+  const [verificationCheck] = await db.query(
+    `SELECT 
+       COUNT(CASE WHEN is_profile_picture = 0 AND status = 'approved' THEN 1 END) as id_docs,
+       COUNT(CASE WHEN is_profile_picture = 1 AND status = 'approved' THEN 1 END) as profile_pics
+     FROM provider_documents 
+     WHERE provider_id = ?`,
+    [profile.id]
+  );
+
+  const isVerified = verificationCheck[0].id_docs > 0 && verificationCheck[0].profile_pics > 0;
+
   res.json({ 
     message: 'Document uploaded and approved',
     document_url: url,
-    auto_verified: true
+    is_profile_picture: isProfilePicture,
+    auto_verified: isVerified,
+    verification_status: {
+      has_id_document: verificationCheck[0].id_docs > 0,
+      has_profile_picture: verificationCheck[0].profile_pics > 0,
+      is_verified: isVerified,
+    }
   });
 }
 
