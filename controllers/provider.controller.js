@@ -1090,6 +1090,7 @@ async function getPublicProfile(req, res) {
       bio: profile.bio,
       is_verified: profile.is_verified,
       membership_status: profile.membership_status,
+      accreditation_tier: profile.accreditation_tier,
       average_rating: profile.average_rating,
       total_ratings: profile.total_ratings,
     },

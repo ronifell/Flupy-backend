@@ -303,9 +303,13 @@ async function searchNearbyProviders(orderId, maxRadiusKm = 20) {
     throw new Error('Order not found or not in SEARCHING status');
   }
 
+  console.log(`[SearchProviders] Searching for order ${orderId}, service_id: ${order.service_id}, radius: ${maxRadiusKm}km`);
+  console.log(`[SearchProviders] Order location: lat=${order.latitude}, lng=${order.longitude}`);
+
   // Use the same search logic as assignProvider but return all candidates
+  // Fixed: Handle NULL values properly and ensure all eligible providers are found
   const candidates = await db.query(
-    `SELECT
+    `SELECT DISTINCT
        pp.user_id as provider_id,
        pp.id as provider_profile_id,
        u.full_name as provider_name,
@@ -326,14 +330,14 @@ async function searchNearbyProviders(orderId, maxRadiusKm = 20) {
            POINT(?, ?)
          ) / 1000
          -- Otherwise use closest address
-         ELSE (
+         ELSE COALESCE((
            SELECT MIN(ST_Distance_Sphere(
              POINT(ua.longitude, ua.latitude),
              POINT(?, ?)
            ) / 1000)
            FROM user_addresses ua
            WHERE ua.user_id = pp.user_id
-         )
+         ), 999999)
        END AS distance_km,
        -- Determine which location is being used
        CASE 
@@ -364,8 +368,9 @@ async function searchNearbyProviders(orderId, maxRadiusKm = 20) {
          )
        )
        -- Distance check: either GPS or closest address must be within radius
+       -- Fixed: Properly handle NULL values and check both GPS and address distances
        AND (
-         -- GPS location within radius
+         -- GPS location within radius (if GPS is recent)
          (pp.current_lat IS NOT NULL 
           AND pp.current_lng IS NOT NULL 
           AND pp.location_updated_at IS NOT NULL
@@ -374,15 +379,18 @@ async function searchNearbyProviders(orderId, maxRadiusKm = 20) {
             POINT(pp.current_lng, pp.current_lat),
             POINT(?, ?)
           ) / 1000 <= ?)
-         -- OR closest address within radius
+         -- OR closest address within radius (if address exists)
          OR (
-           SELECT MIN(ST_Distance_Sphere(
-             POINT(ua.longitude, ua.latitude),
-             POINT(?, ?)
-           ) / 1000)
-           FROM user_addresses ua
-           WHERE ua.user_id = pp.user_id
-         ) <= ?
+           EXISTS (SELECT 1 FROM user_addresses ua WHERE ua.user_id = pp.user_id)
+           AND COALESCE((
+             SELECT MIN(ST_Distance_Sphere(
+               POINT(ua.longitude, ua.latitude),
+               POINT(?, ?)
+             ) / 1000)
+             FROM user_addresses ua
+             WHERE ua.user_id = pp.user_id
+           ), 999999) <= ?
+         )
        )
      ORDER BY
        urs.average_rating DESC,
@@ -400,6 +408,11 @@ async function searchNearbyProviders(orderId, maxRadiusKm = 20) {
       maxRadiusKm,                      // Address radius
     ]
   );
+
+  console.log(`[SearchProviders] Found ${candidates.length} providers`);
+  if (candidates.length > 0) {
+    console.log(`[SearchProviders] Provider IDs: ${candidates.map(c => c.provider_id).join(', ')}`);
+  }
 
   return candidates;
 }
