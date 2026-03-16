@@ -487,34 +487,15 @@ async function searchNearbyProviders(req, res) {
 
 /**
  * Provider starts working on order
- * Note: Service should already be started via customer approval, but keeping this for backward compatibility
+ * DEPRECATED: Only customers can start services by approving a provider.
+ * This endpoint is kept for backward compatibility but returns an error.
  */
 async function startOrder(req, res) {
-  const orderId = req.params.id;
-  const providerId = req.user.id;
-
-  const [order] = await db.query(
-    'SELECT * FROM service_orders WHERE id = ? AND provider_id = ? AND status = ?',
-    [orderId, providerId, 'ASSIGNED']
-  );
-
-  if (!order) {
-    throw new AppError('Order not found or cannot be started. Service must be approved by customer first.', 404);
-  }
-
-  await db.query(
-    `UPDATE service_orders SET status = 'IN_PROGRESS', started_at = NOW() WHERE id = ?`,
-    [orderId]
-  );
-
   const language = req.language || 'en';
-  notificationService.sendToUser(order.customer_id, {
-    title: t('notifications.serviceStarted.title', {}, language),
-    body: t('notifications.serviceStarted.body', {}, language),
-    data: { type: 'order_started', order_id: orderId },
-  });
-
-  res.json({ message: t('messages.orderStarted', {}, language), status: 'IN_PROGRESS' });
+  throw new AppError(
+    'Only customers can start services. The service starts automatically when the customer approves you as the provider.',
+    403
+  );
 }
 
 /**
