@@ -1061,6 +1061,29 @@ async function getPublicProfile(req, res) {
     throw new AppError('Provider profile not found', 404);
   }
 
+  // Get profile picture from provider_profiles.profile_picture_url or provider_documents
+  let profilePictureUrl = profile.profile_picture_url || null;
+  
+  // If not found in profile_picture_url, check documents
+  if (!profilePictureUrl) {
+    const [profilePictureDoc] = await db.query(
+      `SELECT document_url 
+       FROM provider_documents 
+       WHERE provider_id = ? AND is_profile_picture = 1 AND status = 'approved' 
+       ORDER BY created_at DESC 
+       LIMIT 1`,
+      [profile.id]
+    );
+    if (profilePictureDoc && profilePictureDoc.document_url) {
+      profilePictureUrl = profilePictureDoc.document_url;
+    }
+  }
+  
+  // Fallback to avatar_url if no profile picture found
+  if (!profilePictureUrl) {
+    profilePictureUrl = profile.avatar_url;
+  }
+
   // Get services
   const services = await db.query(
     `SELECT sc.id, sc.name, sc.slug, sc.icon_url
@@ -1086,7 +1109,7 @@ async function getPublicProfile(req, res) {
       user_id: profile.user_id,
       full_name: profile.full_name,
       phone: profile.phone,
-      avatar_url: profile.avatar_url,
+      avatar_url: profilePictureUrl, // Use the resolved profile picture URL
       bio: profile.bio,
       is_verified: profile.is_verified,
       membership_status: profile.membership_status,
