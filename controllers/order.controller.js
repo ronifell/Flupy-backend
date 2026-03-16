@@ -380,9 +380,16 @@ async function approveProvider(req, res) {
     throw new AppError('Order not found', 404);
   }
 
-  // Verify order is in SEARCHING status
-  if (order.status !== 'SEARCHING') {
+  // Verify order is in SEARCHING or ASSIGNED status
+  // SEARCHING: Customer searched and found providers
+  // ASSIGNED: Provider claimed the order, customer can approve to start service
+  if (!['SEARCHING', 'ASSIGNED'].includes(order.status)) {
     throw new AppError(`Cannot approve provider for order with status: ${order.status}`, 400);
+  }
+  
+  // If order is ASSIGNED, verify the provider_id matches the one being approved
+  if (order.status === 'ASSIGNED' && order.provider_id !== provider_id) {
+    throw new AppError('Cannot approve a different provider. This order is already assigned to another provider.', 400);
   }
 
   // Verify provider exists and offers this service
@@ -404,13 +411,16 @@ async function approveProvider(req, res) {
     throw new AppError('Provider does not offer this service', 400);
   }
 
-  // Assign provider and start service
-  await db.query(
-    `UPDATE service_orders 
-     SET provider_id = ?, status = 'ASSIGNED', assigned_at = NOW() 
-     WHERE id = ?`,
-    [provider_id, orderId]
-  );
+  // Assign provider if not already assigned (for SEARCHING status)
+  // If already ASSIGNED, skip this step as provider is already assigned
+  if (order.status === 'SEARCHING') {
+    await db.query(
+      `UPDATE service_orders 
+       SET provider_id = ?, status = 'ASSIGNED', assigned_at = NOW() 
+       WHERE id = ?`,
+      [provider_id, orderId]
+    );
+  }
 
   // Create or reactivate conversation
   const [existingConv] = await db.query(
