@@ -102,19 +102,23 @@ async function getProfile(req, res) {
   }
 
   // Get services
-  const services = await db.query(
+  const servicesResult = await db.query(
     `SELECT sc.id, sc.name, sc.slug, sc.icon_url
      FROM provider_services ps
      JOIN service_categories sc ON sc.id = ps.service_id
      WHERE ps.provider_id = ?`,
     [profile.id]
   );
+  // Ensure services is an array
+  const services = Array.isArray(servicesResult) ? servicesResult : [];
 
   // Get documents
-  const documents = await db.query(
+  const documentsResult = await db.query(
     'SELECT id, document_type, document_url, status, is_profile_picture, created_at FROM provider_documents WHERE provider_id = ?',
     [profile.id]
   );
+  // Ensure documents is an array
+  const documents = Array.isArray(documentsResult) ? documentsResult : [];
 
   // Check verification requirements using helper function
   const verificationStatus = await checkVerificationRequirements(profile.id);

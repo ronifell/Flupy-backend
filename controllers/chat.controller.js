@@ -53,23 +53,30 @@ async function getMessages(req, res) {
     [conversationId, limit, offset]
   );
 
+  // Ensure messages is an array
+  const messagesArray = Array.isArray(messages) ? messages : [];
+
   // Get attachments for these messages
-  if (messages.length > 0) {
-    const messageIds = messages.map((m) => m.id);
+  if (messagesArray.length > 0) {
+    const messageIds = messagesArray.map((m) => m.id);
     const placeholders = messageIds.map(() => '?').join(',');
-    const attachments = await db.query(
+    const attachmentsResult = await db.query(
       `SELECT * FROM message_attachments WHERE message_id IN (${placeholders})`,
       messageIds
     );
 
+    // Ensure attachments is an array
+    const attachmentsArray = Array.isArray(attachmentsResult) ? attachmentsResult : [];
+
     // Map attachments to messages
     const attachmentMap = {};
-    for (const att of attachments) {
+    for (const att of attachmentsArray) {
       if (!attachmentMap[att.message_id]) attachmentMap[att.message_id] = [];
       attachmentMap[att.message_id].push(att);
     }
 
-    for (const msg of messages) {
+    // Add attachments to messages
+    for (const msg of messagesArray) {
       msg.attachments = attachmentMap[msg.id] || [];
     }
   }
@@ -82,7 +89,7 @@ async function getMessages(req, res) {
     [conversationId, userId]
   );
 
-  res.json({ messages: messages.reverse() });
+  res.json({ messages: messagesArray.reverse() });
 }
 
 /**
