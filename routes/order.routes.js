@@ -46,8 +46,8 @@ router.post('/:id/approve', authorize('customer'), idParam, validate, asyncHandl
 // Provider: start order
 router.post('/:id/start', authorize('provider'), idParam, validate, asyncHandler(orderController.startOrder));
 
-// Provider: complete order
-router.post('/:id/complete', authorize('provider'), idParam, validate, asyncHandler(orderController.completeOrder));
+// Both: complete order (customer or provider)
+router.post('/:id/complete', idParam, validate, asyncHandler(orderController.completeOrder));
 
 // Both: cancel order
 router.post('/:id/cancel', idParam, validate, asyncHandler(orderController.cancelOrder));

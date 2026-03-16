@@ -513,11 +513,12 @@ async function startOrder(req, res) {
  */
 async function completeOrder(req, res) {
   const orderId = req.params.id;
-  const providerId = req.user.id;
+  const userId = req.user.id;
 
+  // Get order and verify user has access (customer or provider)
   const [order] = await db.query(
-    'SELECT * FROM service_orders WHERE id = ? AND provider_id = ? AND status = ?',
-    [orderId, providerId, 'IN_PROGRESS']
+    'SELECT * FROM service_orders WHERE id = ? AND (customer_id = ? OR provider_id = ?) AND status = ?',
+    [orderId, userId, userId, 'IN_PROGRESS']
   );
 
   if (!order) {
@@ -529,12 +530,16 @@ async function completeOrder(req, res) {
     [orderId]
   );
 
+  // Notify the other party
   const language = req.language || 'en';
-  notificationService.sendToUser(order.customer_id, {
-    title: t('notifications.serviceCompleted.title', {}, language),
-    body: t('notifications.serviceCompleted.body', {}, language),
-    data: { type: 'order_completed', order_id: orderId },
-  });
+  const notifyUserId = userId === order.customer_id ? order.provider_id : order.customer_id;
+  if (notifyUserId) {
+    notificationService.sendToUser(notifyUserId, {
+      title: t('notifications.serviceCompleted.title', {}, language),
+      body: t('notifications.serviceCompleted.body', {}, language),
+      data: { type: 'order_completed', order_id: orderId },
+    });
+  }
 
   res.json({ message: t('messages.orderCompleted', {}, language), status: 'COMPLETED' });
 }
