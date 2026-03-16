@@ -81,8 +81,9 @@ async function getProfile(req, res) {
 
   // Calculate and update accreditation tier if not set or needs update
   if (profile) {
-    const accreditationTier = calculateAccreditationTier(profile.created_at);
-    if (accreditationTier && profile.accreditation_tier !== accreditationTier) {
+    const accreditationTier = calculateAccreditationTier(profile.created_at, profile.is_verified === 1);
+    // Update tier if it's different, or if provider is verified but has no tier yet
+    if (accreditationTier && (profile.accreditation_tier !== accreditationTier || (profile.is_verified === 1 && !profile.accreditation_tier))) {
       await db.query(
         'UPDATE provider_profiles SET accreditation_tier = ? WHERE id = ?',
         [accreditationTier, profile.id]
@@ -130,6 +131,18 @@ async function getProfile(req, res) {
     );
     profile.is_verified = 1;
     console.log(`[Get Profile] Fixed verification status for provider ${userId} - has both required documents`);
+    
+    // Assign iron badge if provider is verified but has no tier yet
+    if (!profile.accreditation_tier) {
+      const accreditationTier = calculateAccreditationTier(profile.created_at, true);
+      if (accreditationTier) {
+        await db.query(
+          'UPDATE provider_profiles SET accreditation_tier = ? WHERE id = ?',
+          [accreditationTier, profile.id]
+        );
+        profile.accreditation_tier = accreditationTier;
+      }
+    }
   }
   
   profile.verification_requirements = {
@@ -143,8 +156,11 @@ async function getProfile(req, res) {
 
 /**
  * Calculate accreditation tier based on provider's activity duration
+ * @param {Date|string} createdAt - Provider profile creation date
+ * @param {boolean} isVerified - Whether provider is verified (default: false)
+ * @returns {string|null} Accreditation tier or null
  */
-function calculateAccreditationTier(createdAt) {
+function calculateAccreditationTier(createdAt, isVerified = false) {
   if (!createdAt) return null;
   
   const now = new Date();
@@ -155,6 +171,8 @@ function calculateAccreditationTier(createdAt) {
   if (monthsActive >= 12) return '1_year';
   if (monthsActive >= 6) return '6_months';
   if (monthsActive >= 3) return '3_months';
+  // If verified but less than 3 months, assign iron badge
+  if (isVerified) return 'iron';
   return null;
 }
 
@@ -213,7 +231,11 @@ async function updateProfile(req, res) {
   }
 
   // Update accreditation tier
-  const accreditationTier = calculateAccreditationTier(profile.created_at);
+  const [updatedProfile] = await db.query(
+    'SELECT is_verified FROM provider_profiles WHERE id = ?',
+    [profile.id]
+  );
+  const accreditationTier = calculateAccreditationTier(profile.created_at, updatedProfile?.is_verified === 1);
   if (accreditationTier) {
     await db.query(
       'UPDATE provider_profiles SET accreditation_tier = ? WHERE id = ?',
@@ -346,6 +368,15 @@ async function uploadDocument(req, res) {
          WHERE id = ?`,
         [profile.id]
       );
+      
+      // Assign iron badge if provider is verified but has no tier yet
+      const accreditationTier = calculateAccreditationTier(profile.created_at, true);
+      if (accreditationTier) {
+        await db.query(
+          'UPDATE provider_profiles SET accreditation_tier = ? WHERE id = ?',
+          [accreditationTier, profile.id]
+        );
+      }
       
       // Auto-set availability if provider has active membership
       await updateAvailabilityIfEligible(profile.id);
@@ -933,12 +964,29 @@ async function reviewDocument(req, res) {
 
   // Only verify if BOTH documents are present and approved
   if (verificationStatus.canVerify) {
+    // Get provider profile to check created_at
+    const [providerProfile] = await db.query(
+      'SELECT created_at FROM provider_profiles WHERE id = ?',
+      [document.provider_profile_id]
+    );
+    
     await db.query(
       `UPDATE provider_profiles 
        SET is_verified = 1 
        WHERE id = ?`,
       [document.provider_profile_id]
     );
+    
+    // Assign iron badge if provider is verified but has no tier yet
+    if (providerProfile) {
+      const accreditationTier = calculateAccreditationTier(providerProfile.created_at, true);
+      if (accreditationTier) {
+        await db.query(
+          'UPDATE provider_profiles SET accreditation_tier = ? WHERE id = ?',
+          [accreditationTier, document.provider_profile_id]
+        );
+      }
+    }
     
     // Auto-set availability if provider has active membership
     await updateAvailabilityIfEligible(document.provider_profile_id);
