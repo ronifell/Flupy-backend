@@ -79,16 +79,21 @@ async function getProfile(req, res) {
     [userId]
   );
 
-  // Calculate and update accreditation tier if not set or needs update
+  // Calculate and update accreditation tier if not set or needs upgrade (never downgrade)
   if (profile) {
-    const accreditationTier = calculateAccreditationTier(profile.created_at, profile.is_verified === 1);
-    // Update tier if it's different, or if provider is verified but has no tier yet
-    if (accreditationTier && (profile.accreditation_tier !== accreditationTier || (profile.is_verified === 1 && !profile.accreditation_tier))) {
+    const calculatedTier = calculateAccreditationTier(profile.created_at, profile.is_verified === 1);
+    const currentTierLevel = getTierLevel(profile.accreditation_tier);
+    const calculatedTierLevel = getTierLevel(calculatedTier);
+    
+    // Only update if:
+    // 1. Provider is verified but has no tier yet, OR
+    // 2. Calculated tier is higher than current tier (upgrade only, never downgrade)
+    if (calculatedTier && (calculatedTierLevel > currentTierLevel || (profile.is_verified === 1 && !profile.accreditation_tier))) {
       await db.query(
         'UPDATE provider_profiles SET accreditation_tier = ? WHERE id = ?',
-        [accreditationTier, profile.id]
+        [calculatedTier, profile.id]
       );
-      profile.accreditation_tier = accreditationTier;
+      profile.accreditation_tier = calculatedTier;
     }
   }
 
@@ -152,6 +157,22 @@ async function getProfile(req, res) {
   };
 
   res.json({ profile, services, documents });
+}
+
+/**
+ * Get tier level/rank for comparison (higher number = higher tier)
+ * @param {string|null} tier - Accreditation tier
+ * @returns {number} Tier level (0 = no tier, 1 = iron, 2 = 3_months, etc.)
+ */
+function getTierLevel(tier) {
+  const tierLevels = {
+    'iron': 1,
+    '3_months': 2,
+    '6_months': 3,
+    '1_year': 4,
+    '3_years': 5,
+  };
+  return tierLevels[tier] || 0;
 }
 
 /**
@@ -230,16 +251,20 @@ async function updateProfile(req, res) {
     }
   }
 
-  // Update accreditation tier
+  // Update accreditation tier (upgrade only, never downgrade)
   const [updatedProfile] = await db.query(
-    'SELECT is_verified FROM provider_profiles WHERE id = ?',
+    'SELECT is_verified, accreditation_tier FROM provider_profiles WHERE id = ?',
     [profile.id]
   );
-  const accreditationTier = calculateAccreditationTier(profile.created_at, updatedProfile?.is_verified === 1);
-  if (accreditationTier) {
+  const calculatedTier = calculateAccreditationTier(profile.created_at, updatedProfile?.is_verified === 1);
+  const currentTierLevel = getTierLevel(updatedProfile?.accreditation_tier);
+  const calculatedTierLevel = getTierLevel(calculatedTier);
+  
+  // Only update if calculated tier is higher than current tier (upgrade only, never downgrade)
+  if (calculatedTier && calculatedTierLevel > currentTierLevel) {
     await db.query(
       'UPDATE provider_profiles SET accreditation_tier = ? WHERE id = ?',
-      [accreditationTier, profile.id]
+      [calculatedTier, profile.id]
     );
   }
 
