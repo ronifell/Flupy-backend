@@ -375,6 +375,9 @@ async function searchNearbyProviders(orderId, maxRadiusKm = 20) {
        pp.id as provider_profile_id,
        u.full_name as provider_name,
        u.phone as provider_phone,
+       u.avatar_url,
+       pp.profile_picture_url,
+       pp.accreditation_tier,
        pp.current_lat,
        pp.current_lng,
        pp.location_updated_at,
@@ -506,7 +509,39 @@ async function searchNearbyProviders(orderId, maxRadiusKm = 20) {
     console.log(`[SearchProviders] - Provider ${p.user_id} (${p.full_name}): available=${p.is_available}, verified=${p.is_verified}, membership=${p.membership_status}, MEETS_CRITERIA=${meetsCriteria}`);
   });
 
-  return candidates;
+  // Resolve profile picture URLs for each candidate
+  const candidatesWithPictures = await Promise.all(
+    candidates.map(async (candidate) => {
+      let profilePictureUrl = candidate.profile_picture_url || null;
+      
+      // If not found in profile_picture_url, check documents
+      if (!profilePictureUrl) {
+        const [profilePictureDoc] = await db.query(
+          `SELECT document_url 
+           FROM provider_documents 
+           WHERE provider_id = ? AND is_profile_picture = 1 AND status = 'approved' 
+           ORDER BY created_at DESC 
+           LIMIT 1`,
+          [candidate.provider_profile_id]
+        );
+        if (profilePictureDoc && profilePictureDoc.document_url) {
+          profilePictureUrl = profilePictureDoc.document_url;
+        }
+      }
+      
+      // Fallback to avatar_url if no profile picture found
+      if (!profilePictureUrl) {
+        profilePictureUrl = candidate.avatar_url;
+      }
+
+      return {
+        ...candidate,
+        avatar_url: profilePictureUrl, // Use resolved profile picture URL
+      };
+    })
+  );
+
+  return candidatesWithPictures;
 }
 
 module.exports = { assignProvider, searchNearbyProviders };
