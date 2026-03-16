@@ -4,22 +4,54 @@ const { buildFileUrl, parsePagination } = require('../utils/helpers');
 
 /**
  * Get conversation for an order
+ * Auto-creates conversation if order is assigned but conversation doesn't exist
  */
 async function getConversation(req, res) {
   const orderId = req.params.orderId;
   const userId = req.user.id;
 
-  const [conversation] = await db.query(
-    `SELECT oc.*, u_cust.full_name as customer_name, u_prov.full_name as provider_name
-     FROM order_conversations oc
-     JOIN users u_cust ON u_cust.id = oc.customer_id
-     JOIN users u_prov ON u_prov.id = oc.provider_id
-     WHERE oc.order_id = ? AND (oc.customer_id = ? OR oc.provider_id = ?)`,
+  // First, check if order exists and user has access
+  const [order] = await db.query(
+    'SELECT * FROM service_orders WHERE id = ? AND (customer_id = ? OR provider_id = ?)',
     [orderId, userId, userId]
   );
 
+  if (!order) {
+    throw new AppError('Order not found or access denied', 404);
+  }
+
+  // Check if conversation exists
+  let [conversation] = await db.query(
+    `SELECT oc.*, u_cust.full_name as customer_name, u_prov.full_name as provider_name
+     FROM order_conversations oc
+     JOIN users u_cust ON u_cust.id = oc.customer_id
+     LEFT JOIN users u_prov ON u_prov.id = oc.provider_id
+     WHERE oc.order_id = ?`,
+    [orderId]
+  );
+
+  // If conversation doesn't exist but order is assigned, create it
+  if (!conversation && order.provider_id) {
+    // Create conversation
+    await db.query(
+      `INSERT INTO order_conversations (order_id, customer_id, provider_id)
+       VALUES (?, ?, ?)`,
+      [orderId, order.customer_id, order.provider_id]
+    );
+
+    // Fetch the newly created conversation
+    [conversation] = await db.query(
+      `SELECT oc.*, u_cust.full_name as customer_name, u_prov.full_name as provider_name
+       FROM order_conversations oc
+       JOIN users u_cust ON u_cust.id = oc.customer_id
+       LEFT JOIN users u_prov ON u_prov.id = oc.provider_id
+       WHERE oc.order_id = ?`,
+      [orderId]
+    );
+  }
+
   if (!conversation) {
-    throw new AppError('Conversation not found or access denied', 404);
+    throw new AppError('Conversation not found. Order must be assigned to a provider first.', 404);
   }
 
   res.json({ conversation });
