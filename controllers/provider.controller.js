@@ -235,9 +235,24 @@ async function updateProfile(req, res) {
 
   // Update services (replace all) - enforce plan limits
   if (services && Array.isArray(services)) {
-    const plan = profile.subscription_plan || 'basic';
+    // Get membership status to check if user has active subscription
+    const [membershipInfo] = await db.query(
+      'SELECT subscription_plan, membership_status FROM provider_profiles WHERE id = ?',
+      [profile.id]
+    );
+    
+    let plan = membershipInfo?.subscription_plan;
+    // If plan is null but membership is active, treat as premium (unlimited) to avoid restrictions
+    // This handles cases where subscription_plan wasn't set in the database
+    if (!plan && membershipInfo?.membership_status === 'active') {
+      plan = 'premium';
+      console.warn(`[UpdateProfile] Provider ${profile.id} has active membership but subscription_plan is null, treating as premium`);
+    }
+    plan = plan || 'basic';
+    
     const serviceLimit = getServiceLimit(plan);
     
+    // Premium plan (null limit) has no restrictions
     if (serviceLimit !== null && services.length > serviceLimit) {
       const planNames = { basic: 'Basic', professional: 'Professional', premium: 'Premium' };
       throw new AppError(
