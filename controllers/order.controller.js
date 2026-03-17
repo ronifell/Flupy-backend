@@ -190,6 +190,42 @@ async function getOrderById(req, res) {
     throw new AppError('Access denied', 403);
   }
 
+  // Resolve provider avatar (if assigned) so mobile can show profile photo in Order Details
+  // provider_profiles.profile_picture_url → latest approved profile picture doc → users.avatar_url
+  let provider_avatar_url = null;
+  if (order.provider_id) {
+    const [prov] = await db.query(
+      `SELECT
+         u.avatar_url,
+         pp.profile_picture_url,
+         pp.id as provider_profile_id
+       FROM users u
+       LEFT JOIN provider_profiles pp ON pp.user_id = u.id
+       WHERE u.id = ?`,
+      [order.provider_id]
+    );
+
+    provider_avatar_url = prov?.profile_picture_url || null;
+
+    if (!provider_avatar_url && prov?.provider_profile_id) {
+      const [doc] = await db.query(
+        `SELECT document_url
+         FROM provider_documents
+         WHERE provider_id = ?
+           AND is_profile_picture = 1
+           AND status = 'approved'
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        [prov.provider_profile_id]
+      );
+      if (doc?.document_url) provider_avatar_url = doc.document_url;
+    }
+
+    if (!provider_avatar_url) provider_avatar_url = prov?.avatar_url || null;
+  }
+
+  order.provider_avatar_url = provider_avatar_url;
+
   // Get media
   const media = await db.query(
     'SELECT * FROM order_media WHERE order_id = ? ORDER BY created_at',
