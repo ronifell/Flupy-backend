@@ -15,6 +15,9 @@ async function createOrder(req, res) {
     address_id, address_text, scheduled_start, scheduled_end,
   } = req.body;
 
+  // Ensure description is never NULL for DB integrity (column is NOT NULL in schema)
+  const safeDescription = (description || '').toString().trim();
+
   const conn = await db.getConnection();
   try {
     await conn.beginTransaction();
@@ -24,7 +27,16 @@ async function createOrder(req, res) {
       `INSERT INTO service_orders
         (customer_id, service_id, description, order_mode, latitude, longitude, address_id, address_text, status)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'CREATED')`,
-      [customerId, service_id || null, description || null, order_mode || 'ASAP', latitude || null, longitude || null, address_id || null, address_text || null]
+      [
+        customerId,
+        service_id || null,
+        safeDescription, // never NULL
+        order_mode || 'ASAP',
+        latitude || null,
+        longitude || null,
+        address_id || null,
+        address_text || null,
+      ]
     );
     const orderId = result.insertId;
 
