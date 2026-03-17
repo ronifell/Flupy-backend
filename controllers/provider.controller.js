@@ -210,7 +210,13 @@ function getServiceLimit(plan) {
     professional: 3,
     premium: null, // null means unlimited
   };
-  return limits[plan] || limits.basic;
+  // Check if plan exists in limits object first
+  // If it exists (even if value is null), return that value
+  // Only default to 'basic' if plan is not in the limits object
+  if (plan in limits) {
+    return limits[plan];
+  }
+  return limits.basic;
 }
 
 /**
