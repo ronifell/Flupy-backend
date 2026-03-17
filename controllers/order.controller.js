@@ -502,11 +502,13 @@ async function searchNearbyProviders(req, res) {
  * Query params:
  * - service_id (required)
  * - q (optional): provider name or city substring
+ * - latitude, longitude (optional): for location-based search
+ * - radius_km (optional, default 20): max distance when using coordinates
  * - limit (optional, default 30)
  */
 async function searchProvidersCatalog(req, res) {
   const customerId = req.user.id;
-  const { service_id, q, limit } = req.query;
+  const { service_id, q, latitude, longitude, radius_km, limit } = req.query;
 
   const serviceId = parseInt(service_id, 10);
   if (!serviceId || isNaN(serviceId)) {
@@ -515,11 +517,26 @@ async function searchProvidersCatalog(req, res) {
 
   const safeLimit = Math.min(parseInt(limit || '30', 10) || 30, 50);
   const search = (q || '').trim();
+  const hasCoords = latitude != null && longitude != null && latitude !== '' && longitude !== '';
+  const radius = parseFloat(radius_km || '20') || 20;
+  const lat = hasCoords ? parseFloat(latitude) : null;
+  const lng = hasCoords ? parseFloat(longitude) : null;
+
+  if (hasCoords) {
+    if (
+      isNaN(lat) || isNaN(lng) ||
+      lat < -90 || lat > 90 ||
+      lng < -180 || lng > 180
+    ) {
+      throw new AppError('Invalid latitude or longitude values', 400);
+    }
+  }
 
   // Search providers that:
   // - are available, verified, active membership
   // - offer this service
-  // - match by provider name OR any saved address city (if q is provided)
+  // - optionally match by provider name OR any saved address city (if q is provided)
+  // - optionally are within radius of given coordinates (if latitude/longitude provided)
   //
   // We also include one representative city (MAX city) if present.
   const params = [serviceId, customerId];
@@ -527,6 +544,12 @@ async function searchProvidersCatalog(req, res) {
   if (search) {
     whereQ = 'AND (u.full_name LIKE ? OR ua.city LIKE ?)';
     params.push(`%${search}%`, `%${search}%`);
+  }
+  let havingQ = '';
+  if (hasCoords) {
+    // Filter by distance when coordinates are available
+    havingQ = 'HAVING distance_km IS NOT NULL AND distance_km <= ?';
+    params.push(radius);
   }
   params.push(safeLimit);
 
@@ -540,7 +563,33 @@ async function searchProvidersCatalog(req, res) {
       pp.accreditation_tier,
       urs.average_rating,
       urs.total_ratings,
-      MAX(ua.city) as city
+      MAX(ua.city) as city,
+      ${
+        hasCoords
+          ? // Distance from provided coordinates to provider's current GPS or closest address
+            `COALESCE(
+               CASE 
+                 WHEN pp.current_lat IS NOT NULL 
+                   AND pp.current_lng IS NOT NULL 
+                   AND pp.location_updated_at IS NOT NULL
+                   AND pp.location_updated_at > DATE_SUB(NOW(), INTERVAL 30 MINUTE)
+                 THEN ST_Distance_Sphere(
+                   POINT(pp.current_lng, pp.current_lat),
+                   POINT(${lng}, ${lat})
+                 ) / 1000
+                 ELSE NULL
+               END,
+               (
+                 SELECT MIN(ST_Distance_Sphere(
+                   POINT(ua2.longitude, ua2.latitude),
+                   POINT(${lng}, ${lat})
+                 ) / 1000)
+                 FROM user_addresses ua2
+                 WHERE ua2.user_id = pp.user_id
+               )
+             )`
+          : 'NULL'
+      } as distance_km
      FROM provider_profiles pp
      JOIN users u ON u.id = pp.user_id
      JOIN provider_services ps ON ps.provider_id = pp.id AND ps.service_id = ?
@@ -554,7 +603,9 @@ async function searchProvidersCatalog(req, res) {
      GROUP BY
       pp.user_id, u.full_name, u.phone, u.avatar_url, pp.profile_picture_url,
       pp.accreditation_tier, urs.average_rating, urs.total_ratings
+     ${havingQ}
      ORDER BY
+      ${hasCoords ? 'distance_km ASC,' : ''}
       urs.average_rating DESC,
       urs.total_ratings DESC,
       u.full_name ASC
