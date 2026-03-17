@@ -12,6 +12,14 @@ router.get('/categories', asyncHandler(orderController.getServiceCategories));
 // Protected routes
 router.use(authenticate);
 
+// Customer: search providers by name/city for a given service (manual selection flow)
+// NOTE: Must be defined before '/:id' routes to avoid conflicts
+router.get(
+  '/providers/search',
+  authorize('customer'),
+  asyncHandler(orderController.searchProvidersCatalog)
+);
+
 // Customer: create order
 router.post(
   '/',

@@ -32,7 +32,7 @@ const loginRules = [
 // ── Order Validators ────────────────────────────────────────
 const createOrderRules = [
   body('service_id').isInt({ min: 1 }).withMessage('Valid service ID is required'),
-  body('description').trim().notEmpty().withMessage('Problem description is required'),
+  body('description').optional({ nullable: true }).trim(),
   body('order_mode').isIn(['ASAP', 'SCHEDULED']).withMessage('Order mode must be ASAP or SCHEDULED'),
   body('latitude').isDecimal().withMessage('Valid latitude is required'),
   body('longitude').isDecimal().withMessage('Valid longitude is required'),

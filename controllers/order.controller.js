@@ -496,6 +496,113 @@ async function searchNearbyProviders(req, res) {
 }
 
 /**
+ * Customer: search providers by name or city for a service category
+ * Used on the "service type" screen before the order is created.
+ *
+ * Query params:
+ * - service_id (required)
+ * - q (optional): provider name or city substring
+ * - limit (optional, default 30)
+ */
+async function searchProvidersCatalog(req, res) {
+  const customerId = req.user.id;
+  const { service_id, q, limit } = req.query;
+
+  const serviceId = parseInt(service_id, 10);
+  if (!serviceId || isNaN(serviceId)) {
+    throw new AppError('service_id is required', 400);
+  }
+
+  const safeLimit = Math.min(parseInt(limit || '30', 10) || 30, 50);
+  const search = (q || '').trim();
+
+  // Search providers that:
+  // - are available, verified, active membership
+  // - offer this service
+  // - match by provider name OR any saved address city (if q is provided)
+  //
+  // We also include one representative city (MAX city) if present.
+  const params = [serviceId, customerId];
+  let whereQ = '';
+  if (search) {
+    whereQ = 'AND (u.full_name LIKE ? OR ua.city LIKE ?)';
+    params.push(`%${search}%`, `%${search}%`);
+  }
+  params.push(safeLimit);
+
+  const rows = await db.query(
+    `SELECT
+      pp.user_id as provider_id,
+      u.full_name as provider_name,
+      u.phone as provider_phone,
+      u.avatar_url,
+      pp.profile_picture_url,
+      pp.accreditation_tier,
+      urs.average_rating,
+      urs.total_ratings,
+      MAX(ua.city) as city
+     FROM provider_profiles pp
+     JOIN users u ON u.id = pp.user_id
+     JOIN provider_services ps ON ps.provider_id = pp.id AND ps.service_id = ?
+     LEFT JOIN user_rating_summary urs ON urs.user_id = pp.user_id
+     LEFT JOIN user_addresses ua ON ua.user_id = pp.user_id
+     WHERE pp.is_available = 1
+       AND pp.is_verified = 1
+       AND pp.membership_status = 'active'
+       AND pp.user_id != ?
+       ${whereQ}
+     GROUP BY
+      pp.user_id, u.full_name, u.phone, u.avatar_url, pp.profile_picture_url,
+      pp.accreditation_tier, urs.average_rating, urs.total_ratings
+     ORDER BY
+      urs.average_rating DESC,
+      urs.total_ratings DESC,
+      u.full_name ASC
+     LIMIT ?`,
+    params
+  );
+
+  // Resolve profile picture URLs similarly to the matching logic used elsewhere:
+  // provider_profiles.profile_picture_url → provider_documents latest approved profile pic → users.avatar_url
+  const providers = await Promise.all(
+    (rows || []).map(async (p) => {
+      let avatarUrl = p.profile_picture_url || null;
+
+      if (!avatarUrl) {
+        const [doc] = await db.query(
+          `SELECT document_url
+           FROM provider_documents
+           WHERE provider_id = (
+             SELECT id FROM provider_profiles WHERE user_id = ?
+           )
+             AND is_profile_picture = 1
+             AND status = 'approved'
+           ORDER BY created_at DESC
+           LIMIT 1`,
+          [p.provider_id]
+        );
+        if (doc?.document_url) avatarUrl = doc.document_url;
+      }
+
+      if (!avatarUrl) avatarUrl = p.avatar_url;
+
+      return {
+        provider_id: p.provider_id,
+        provider_name: p.provider_name,
+        provider_phone: p.provider_phone,
+        avatar_url: avatarUrl,
+        accreditation_tier: p.accreditation_tier,
+        average_rating: p.average_rating,
+        total_ratings: p.total_ratings,
+        city: p.city || null,
+      };
+    })
+  );
+
+  res.json({ providers });
+}
+
+/**
  * Provider starts working on order
  * DEPRECATED: Only customers can start services by approving a provider.
  * This endpoint is kept for backward compatibility but returns an error.
@@ -644,6 +751,7 @@ module.exports = {
   acceptOrder,
   declineOrder,
   approveProvider,
+  searchProvidersCatalog,
   searchNearbyProviders,
   startOrder,
   completeOrder,
