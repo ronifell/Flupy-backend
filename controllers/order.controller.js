@@ -556,17 +556,26 @@ async function searchNearbyProviders(req, res) {
  */
 async function searchProvidersCatalog(req, res) {
   const customerId = req.user.id;
-  const { service_id, q, latitude, longitude, radius_km, limit } = req.query;
+  const { service_id, q, latitude, longitude, radius_km, limit, sort_by } = req.query;
 
   const serviceId = parseInt(service_id, 10);
   if (!serviceId || isNaN(serviceId)) {
     throw new AppError('service_id is required', 400);
   }
 
-  const safeLimit = Math.min(parseInt(limit || '30', 10) || 30, 50);
+  // Get customer's country to filter providers
+  const [customer] = await db.query(
+    'SELECT country FROM users WHERE id = ?',
+    [customerId]
+  );
+
+  if (!customer || !customer.country) {
+    throw new AppError('Customer country not found', 400);
+  }
+
+  const safeLimit = Math.min(parseInt(limit || '100', 10) || 100, 200);
   const search = (q || '').trim();
   const hasCoords = latitude != null && longitude != null && latitude !== '' && longitude !== '';
-  const radius = parseFloat(radius_km || '20') || 20;
   const lat = hasCoords ? parseFloat(latitude) : null;
   const lng = hasCoords ? parseFloat(longitude) : null;
 
@@ -581,29 +590,54 @@ async function searchProvidersCatalog(req, res) {
   }
 
   // Search providers that:
-  // - are available, verified, active membership
+  // - are in the same country as the customer
+  // - are available, active membership
   // - offer this service
   // - optionally match by provider name OR any saved address city (if q is provided)
-  // - optionally are within radius of given coordinates (if latitude/longitude provided)
+  // - Calculate distance if coordinates provided (but don't filter by radius - show all in country)
   //
   // We also include one representative city (MAX city) if present.
-  const params = [serviceId, customerId];
-  let whereQ = '';
+  const params = [serviceId, customerId, customer.country];
+  let whereQ = 'AND u.country = ?';
   if (search) {
-    whereQ = 'AND (u.full_name LIKE ? OR ua.city LIKE ?)';
+    whereQ += ' AND (u.full_name LIKE ? OR ua.city LIKE ?)';
     params.push(`%${search}%`, `%${search}%`);
   }
-  let havingQ = '';
-  if (hasCoords) {
-    // Filter by distance when coordinates are available
-    havingQ = 'HAVING distance_km IS NOT NULL AND distance_km <= ?';
-    params.push(radius);
-  }
+  
+  // Don't filter by radius - show all providers in the country
+  // Distance is calculated for sorting purposes only
   params.push(safeLimit);
 
+  // Calculate distance if coordinates provided (for sorting)
+  const distanceSelect = hasCoords
+    ? `COALESCE(
+         CASE 
+           WHEN pp.current_lat IS NOT NULL 
+             AND pp.current_lng IS NOT NULL 
+             AND pp.location_updated_at IS NOT NULL
+             AND pp.location_updated_at > DATE_SUB(NOW(), INTERVAL 30 MINUTE)
+           THEN ST_Distance_Sphere(
+             POINT(pp.current_lng, pp.current_lat),
+             POINT(${lng}, ${lat})
+           ) / 1000
+           ELSE NULL
+         END,
+         (
+           SELECT MIN(ST_Distance_Sphere(
+             POINT(ua2.longitude, ua2.latitude),
+             POINT(${lng}, ${lat})
+           ) / 1000)
+           FROM user_addresses ua2
+           WHERE ua2.user_id = pp.user_id
+         )
+       )`
+    : 'NULL';
+
+  // Check for verification documents (ID and profile picture)
   const rows = await db.query(
     `SELECT
       pp.user_id as provider_id,
+      pp.id as provider_profile_id,
       u.full_name as provider_name,
       u.phone as provider_phone,
       u.avatar_url,
@@ -612,32 +646,28 @@ async function searchProvidersCatalog(req, res) {
       urs.average_rating,
       urs.total_ratings,
       MAX(ua.city) as city,
-      ${
-        hasCoords
-          ? // Distance from provided coordinates to provider's current GPS or closest address
-            `COALESCE(
-               CASE 
-                 WHEN pp.current_lat IS NOT NULL 
-                   AND pp.current_lng IS NOT NULL 
-                   AND pp.location_updated_at IS NOT NULL
-                   AND pp.location_updated_at > DATE_SUB(NOW(), INTERVAL 30 MINUTE)
-                 THEN ST_Distance_Sphere(
-                   POINT(pp.current_lng, pp.current_lat),
-                   POINT(${lng}, ${lat})
-                 ) / 1000
-                 ELSE NULL
-               END,
-               (
-                 SELECT MIN(ST_Distance_Sphere(
-                   POINT(ua2.longitude, ua2.latitude),
-                   POINT(${lng}, ${lat})
-                 ) / 1000)
-                 FROM user_addresses ua2
-                 WHERE ua2.user_id = pp.user_id
-               )
-             )`
-          : 'NULL'
-      } as distance_km
+      ${distanceSelect} as distance_km,
+      -- Check for ID document
+      CASE 
+        WHEN EXISTS (
+          SELECT 1 FROM provider_documents pd
+          WHERE pd.provider_id = pp.id
+            AND pd.is_profile_picture = 0
+            AND (pd.document_type = 'ID' OR pd.document_type = 'General')
+            AND pd.status = 'approved'
+        ) THEN 1
+        ELSE 0
+      END as has_id_document,
+      -- Check for profile picture
+      CASE 
+        WHEN EXISTS (
+          SELECT 1 FROM provider_documents pd
+          WHERE pd.provider_id = pp.id
+            AND pd.is_profile_picture = 1
+            AND pd.status = 'approved'
+        ) OR pp.profile_picture_url IS NOT NULL THEN 1
+        ELSE 0
+      END as has_profile_picture
      FROM provider_profiles pp
      JOIN users u ON u.id = pp.user_id
      JOIN provider_services ps ON ps.provider_id = pp.id AND ps.service_id = ?
@@ -648,21 +678,15 @@ async function searchProvidersCatalog(req, res) {
        AND pp.user_id != ?
        ${whereQ}
      GROUP BY
-      pp.user_id, u.full_name, u.phone, u.avatar_url, pp.profile_picture_url,
+      pp.user_id, pp.id, u.full_name, u.phone, u.avatar_url, pp.profile_picture_url,
       pp.accreditation_tier, urs.average_rating, urs.total_ratings
-     ${havingQ}
-     ORDER BY
-      ${hasCoords ? 'distance_km ASC,' : ''}
-      urs.average_rating DESC,
-      urs.total_ratings DESC,
-      u.full_name ASC
      LIMIT ?`,
     params
   );
 
   // Resolve profile picture URLs similarly to the matching logic used elsewhere:
   // provider_profiles.profile_picture_url → provider_documents latest approved profile pic → users.avatar_url
-  const providers = await Promise.all(
+  let providers = await Promise.all(
     (rows || []).map(async (p) => {
       let avatarUrl = p.profile_picture_url || null;
 
@@ -670,14 +694,12 @@ async function searchProvidersCatalog(req, res) {
         const [doc] = await db.query(
           `SELECT document_url
            FROM provider_documents
-           WHERE provider_id = (
-             SELECT id FROM provider_profiles WHERE user_id = ?
-           )
+           WHERE provider_id = ?
              AND is_profile_picture = 1
              AND status = 'approved'
            ORDER BY created_at DESC
            LIMIT 1`,
-          [p.provider_id]
+          [p.provider_profile_id]
         );
         if (doc?.document_url) avatarUrl = doc.document_url;
       }
@@ -690,12 +712,61 @@ async function searchProvidersCatalog(req, res) {
         provider_phone: p.provider_phone,
         avatar_url: avatarUrl,
         accreditation_tier: p.accreditation_tier,
-        average_rating: p.average_rating,
-        total_ratings: p.total_ratings,
+        average_rating: p.average_rating || 0,
+        total_ratings: p.total_ratings || 0,
         city: p.city || null,
+        distance_km: p.distance_km ? parseFloat(p.distance_km) : null,
+        has_id_document: p.has_id_document === 1,
+        has_profile_picture: p.has_profile_picture === 1,
+        verification_score: (p.has_id_document === 1 ? 1 : 0) + (p.has_profile_picture === 1 ? 1 : 0), // 0, 1, or 2
       };
     })
   );
+
+  // Apply sorting
+  const sortBy = sort_by || 'rating'; // Default to rating
+  if (sortBy === 'proximity' && hasCoords) {
+    // Sort by distance (closest first), then rating
+    providers.sort((a, b) => {
+      if (a.distance_km === null && b.distance_km === null) return 0;
+      if (a.distance_km === null) return 1;
+      if (b.distance_km === null) return -1;
+      if (a.distance_km !== b.distance_km) return a.distance_km - b.distance_km;
+      // If same distance, sort by rating
+      return (b.average_rating || 0) - (a.average_rating || 0);
+    });
+  } else if (sortBy === 'rating') {
+    // Sort by rating (highest first), then number of ratings, then distance if available
+    providers.sort((a, b) => {
+      if (a.average_rating !== b.average_rating) {
+        return (b.average_rating || 0) - (a.average_rating || 0);
+      }
+      if (a.total_ratings !== b.total_ratings) {
+        return (b.total_ratings || 0) - (a.total_ratings || 0);
+      }
+      // If same rating, sort by distance if available
+      if (hasCoords && a.distance_km !== null && b.distance_km !== null) {
+        return a.distance_km - b.distance_km;
+      }
+      return 0;
+    });
+  } else if (sortBy === 'verification') {
+    // Sort by verification score (both documents = 2, one = 1, none = 0), then rating, then distance
+    providers.sort((a, b) => {
+      if (a.verification_score !== b.verification_score) {
+        return b.verification_score - a.verification_score;
+      }
+      // If same verification, sort by rating
+      if (a.average_rating !== b.average_rating) {
+        return (b.average_rating || 0) - (a.average_rating || 0);
+      }
+      // If same rating, sort by distance if available
+      if (hasCoords && a.distance_km !== null && b.distance_km !== null) {
+        return a.distance_km - b.distance_km;
+      }
+      return 0;
+    });
+  }
 
   res.json({ providers });
 }
