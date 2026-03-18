@@ -644,7 +644,6 @@ async function searchProvidersCatalog(req, res) {
      LEFT JOIN user_rating_summary urs ON urs.user_id = pp.user_id
      LEFT JOIN user_addresses ua ON ua.user_id = pp.user_id
      WHERE pp.is_available = 1
-       AND pp.is_verified = 1
        AND pp.membership_status = 'active'
        AND pp.user_id != ?
        ${whereQ}

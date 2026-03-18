@@ -60,7 +60,7 @@ async function assignProvider(orderId) {
     const offersService = p.offered_services ? p.offered_services.split(',').includes(String(order.service_id)) : false;
     const hasLocation = !!(p.current_lat && p.current_lng);
     const locationRecent = p.location_updated_at ? (p.minutes_since_location_update <= 30) : false;
-    const eligible = p.is_available === 1 && p.is_verified === 1 && p.membership_status === 'active' && offersService && hasLocation && locationRecent;
+    const eligible = p.is_available === 1 && p.membership_status === 'active' && offersService && hasLocation && locationRecent;
     
     return {
       provider_id: p.id,
@@ -76,7 +76,6 @@ async function assignProvider(orderId) {
       ELIGIBLE: eligible,
       rejection_reasons: [
         p.is_available !== 1 && 'not_available',
-        p.is_verified !== 1 && 'not_verified',
         p.membership_status !== 'active' && 'no_active_membership',
         !offersService && 'doesnt_offer_service',
         !hasLocation && 'no_location',
@@ -135,7 +134,6 @@ async function assignProvider(orderId) {
        JOIN provider_services ps ON ps.provider_id = pp.id
        LEFT JOIN user_rating_summary urs ON urs.user_id = pp.user_id
        WHERE pp.is_available = 1
-         AND pp.is_verified = 1
          AND pp.membership_status = 'active'
          AND ps.service_id = ?
          AND pp.user_id != ?
@@ -346,7 +344,7 @@ async function searchNearbyProviders(orderId, maxRadiusKm = 20) {
   diagnosticProviders.forEach(p => {
     const hasRecentGPS = p.current_lat && p.current_lng && p.location_updated_at && p.minutes_since_location_update <= 30;
     const offersService = p.offered_services ? p.offered_services.split(',').includes(String(order.service_id)) : false;
-    const eligible = p.is_available === 1 && p.is_verified === 1 && p.membership_status === 'active' && offersService;
+    const eligible = p.is_available === 1 && p.membership_status === 'active' && offersService;
     
     console.log(`[SearchProviders] Provider ${p.user_id} (${p.full_name}):`, {
       is_available: p.is_available,
@@ -360,7 +358,6 @@ async function searchNearbyProviders(orderId, maxRadiusKm = 20) {
       ELIGIBLE: eligible,
       rejection_reasons: [
         p.is_available !== 1 && 'not_available',
-        p.is_verified !== 1 && 'not_verified',
         p.membership_status !== 'active' && 'no_active_membership',
         !offersService && 'doesnt_offer_service',
       ].filter(Boolean)
@@ -419,7 +416,6 @@ async function searchNearbyProviders(orderId, maxRadiusKm = 20) {
      JOIN users u ON u.id = pp.user_id
      LEFT JOIN user_rating_summary urs ON urs.user_id = pp.user_id
      WHERE pp.is_available = 1
-       AND pp.is_verified = 1
        AND pp.membership_status = 'active'
        AND ps.service_id = ?
        AND pp.user_id != ?
@@ -505,7 +501,7 @@ async function searchNearbyProviders(orderId, maxRadiusKm = 20) {
 
   console.log(`[SearchProviders] Total providers offering service ${order.service_id}: ${allProvidersWithService.length}`);
   allProvidersWithService.forEach(p => {
-    const meetsCriteria = p.is_available === 1 && p.is_verified === 1 && p.membership_status === 'active';
+    const meetsCriteria = p.is_available === 1 && p.membership_status === 'active';
     console.log(`[SearchProviders] - Provider ${p.user_id} (${p.full_name}): available=${p.is_available}, verified=${p.is_verified}, membership=${p.membership_status}, MEETS_CRITERIA=${meetsCriteria}`);
   });
 

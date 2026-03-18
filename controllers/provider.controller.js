@@ -5,8 +5,9 @@ const notificationService = require('../services/notification.service');
 const { t } = require('../i18n');
 
 /**
- * Helper function to check if provider has both required documents for verification
+ * Helper function to check if provider has documents (optional - no longer required for verification)
  * Returns { hasIdDocument: boolean, hasProfilePicture: boolean, canVerify: boolean }
+ * Note: Documents are now optional, so canVerify is always true
  */
 async function checkVerificationRequirements(providerId) {
   const allDocs = await db.query(
@@ -27,24 +28,25 @@ async function checkVerificationRequirements(providerId) {
   return {
     hasIdDocument,
     hasProfilePicture,
-    canVerify: hasIdDocument && hasProfilePicture,
+    canVerify: true, // Documents are optional, so verification is not blocked by missing documents
   };
 }
 
 /**
- * Helper function to automatically set is_available = 1 when provider is verified and has active membership
+ * Helper function to automatically set is_available = 1 when provider has active membership
+ * Documents are optional, so verification is no longer required
  * Can accept either provider_id (from provider_profiles.id) or user_id
  */
 async function updateAvailabilityIfEligible(providerIdOrUserId, useUserId = false) {
   const query = useUserId
-    ? 'SELECT id, is_verified, membership_status, is_available FROM provider_profiles WHERE user_id = ?'
-    : 'SELECT id, is_verified, membership_status, is_available FROM provider_profiles WHERE id = ?';
+    ? 'SELECT id, membership_status, is_available FROM provider_profiles WHERE user_id = ?'
+    : 'SELECT id, membership_status, is_available FROM provider_profiles WHERE id = ?';
   
   const [profile] = await db.query(query, [providerIdOrUserId]);
 
   if (!profile) return;
 
-  const shouldBeAvailable = profile.is_verified === 1 && profile.membership_status === 'active';
+  const shouldBeAvailable = profile.membership_status === 'active';
   
   // Only update if status needs to change
   if (shouldBeAvailable && profile.is_available === 0) {
@@ -52,14 +54,14 @@ async function updateAvailabilityIfEligible(providerIdOrUserId, useUserId = fals
       'UPDATE provider_profiles SET is_available = 1 WHERE id = ?',
       [profile.id]
     );
-    console.log(`[Auto-Availability] Provider ${profile.id} automatically set to available (verified + active membership)`);
+    console.log(`[Auto-Availability] Provider ${profile.id} automatically set to available (active membership)`);
   } else if (!shouldBeAvailable && profile.is_available === 1) {
-    // If they lose verification or membership, set to unavailable
+    // If they lose membership, set to unavailable
     await db.query(
       'UPDATE provider_profiles SET is_available = 0 WHERE id = ?',
       [profile.id]
     );
-    console.log(`[Auto-Availability] Provider ${profile.id} automatically set to unavailable (missing verification or membership)`);
+    console.log(`[Auto-Availability] Provider ${profile.id} automatically set to unavailable (no active membership)`);
   }
 }
 
@@ -120,39 +122,11 @@ async function getProfile(req, res) {
   // Ensure documents is an array
   const documents = Array.isArray(documentsResult) ? documentsResult : [];
 
-  // Check verification requirements using helper function
+  // Check verification requirements using helper function (documents are optional)
   const verificationStatus = await checkVerificationRequirements(profile.id);
   
-  // Ensure verification status is correct (fix any inconsistencies)
-  if (profile.is_verified === 1 && !verificationStatus.canVerify) {
-    // Provider is marked as verified but doesn't have both documents - fix it
-    await db.query(
-      'UPDATE provider_profiles SET is_verified = 0 WHERE id = ?',
-      [profile.id]
-    );
-    profile.is_verified = 0;
-    console.log(`[Get Profile] Fixed verification status for provider ${userId} - missing required documents`);
-  } else if (profile.is_verified === 0 && verificationStatus.canVerify) {
-    // Provider has both documents but isn't verified - fix it
-    await db.query(
-      'UPDATE provider_profiles SET is_verified = 1 WHERE id = ?',
-      [profile.id]
-    );
-    profile.is_verified = 1;
-    console.log(`[Get Profile] Fixed verification status for provider ${userId} - has both required documents`);
-    
-    // Assign iron badge if provider is verified but has no tier yet
-    if (!profile.accreditation_tier) {
-      const accreditationTier = calculateAccreditationTier(profile.created_at, true);
-      if (accreditationTier) {
-        await db.query(
-          'UPDATE provider_profiles SET accreditation_tier = ? WHERE id = ?',
-          [accreditationTier, profile.id]
-        );
-        profile.accreditation_tier = accreditationTier;
-      }
-    }
-  }
+  // Documents are optional, so we don't automatically verify/unverify based on documents
+  // Verification status remains as-is (can be manually set by admin if needed)
   
   profile.verification_requirements = {
     has_id_document: verificationStatus.hasIdDocument,
@@ -407,42 +381,11 @@ async function uploadDocument(req, res) {
       [insertedDoc.id]
     );
     
-    // Check if provider has both ID document and profile picture for verification
-    const verificationStatus = await checkVerificationRequirements(profile.id);
+    // Documents are optional, so we don't automatically verify/unverify based on documents
+    // Auto-set availability if provider has active membership (verification not required)
+    await updateAvailabilityIfEligible(profile.id);
     
-    // Auto-verify provider only if they have both ID and profile picture
-    if (verificationStatus.canVerify) {
-      await db.query(
-        `UPDATE provider_profiles 
-         SET is_verified = 1 
-         WHERE id = ?`,
-        [profile.id]
-      );
-      
-      // Assign iron badge if provider is verified but has no tier yet
-      const accreditationTier = calculateAccreditationTier(profile.created_at, true);
-      if (accreditationTier) {
-        await db.query(
-          'UPDATE provider_profiles SET accreditation_tier = ? WHERE id = ?',
-          [accreditationTier, profile.id]
-        );
-      }
-      
-      // Auto-set availability if provider has active membership
-      await updateAvailabilityIfEligible(profile.id);
-      
-      console.log(`[Upload Document] Provider ${userId} verified (has both ID and profile picture)`);
-    } else {
-      // Ensure provider is NOT verified if they don't have both documents
-      await db.query(
-        `UPDATE provider_profiles 
-         SET is_verified = 0 
-         WHERE id = ?`,
-        [profile.id]
-      );
-      
-      console.log(`[Upload Document] Provider ${userId} needs both ID document and profile picture for verification (ID: ${verificationStatus.hasIdDocument}, Profile Picture: ${verificationStatus.hasProfilePicture})`);
-    }
+    console.log(`[Upload Document] Document uploaded for provider ${userId} (documents are optional)`);
   }
 
   console.log(`[Upload Document] Document uploaded successfully for user ${userId}, document_id: ${profile.id}, url: ${url}`);
@@ -1009,50 +952,11 @@ async function reviewDocument(req, res) {
     [status, documentId]
   );
 
-  // Check if provider has both ID document and profile picture for verification
-  const verificationStatus = await checkVerificationRequirements(document.provider_profile_id);
-
-  // Only verify if BOTH documents are present and approved
-  if (verificationStatus.canVerify) {
-    // Get provider profile to check created_at
-    const [providerProfile] = await db.query(
-      'SELECT created_at FROM provider_profiles WHERE id = ?',
-      [document.provider_profile_id]
-    );
-    
-    await db.query(
-      `UPDATE provider_profiles 
-       SET is_verified = 1 
-       WHERE id = ?`,
-      [document.provider_profile_id]
-    );
-    
-    // Assign iron badge if provider is verified but has no tier yet
-    if (providerProfile) {
-      const accreditationTier = calculateAccreditationTier(providerProfile.created_at, true);
-      if (accreditationTier) {
-        await db.query(
-          'UPDATE provider_profiles SET accreditation_tier = ? WHERE id = ?',
-          [accreditationTier, document.provider_profile_id]
-        );
-      }
-    }
-    
-    // Auto-set availability if provider has active membership
-    await updateAvailabilityIfEligible(document.provider_profile_id);
-    
-    console.log(`[Review Document] Provider ${document.user_id} verified (has both ID and profile picture)`);
-  } else {
-    // Unverify provider if they don't have both documents
-    await db.query(
-      `UPDATE provider_profiles 
-       SET is_verified = 0 
-       WHERE id = ?`,
-      [document.provider_profile_id]
-    );
-    
-    console.log(`[Review Document] Provider ${document.user_id} unverified - missing required documents (ID: ${verificationStatus.hasIdDocument}, Profile Picture: ${verificationStatus.hasProfilePicture})`);
-  }
+  // Documents are optional, so we don't automatically verify/unverify based on documents
+  // Auto-set availability if provider has active membership (verification not required)
+  await updateAvailabilityIfEligible(document.provider_profile_id);
+  
+  console.log(`[Review Document] Document reviewed for provider ${document.user_id} (documents are optional)`);
 
   const language = req.language || 'en';
   res.json({ 
