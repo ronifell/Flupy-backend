@@ -34,7 +34,8 @@ const forgotPasswordRules = [
 ];
 
 const resetPasswordRules = [
-  body('token').notEmpty().withMessage('Reset token is required'),
+  body('email').isEmail().normalizeEmail().withMessage('Valid email is required'),
+  body('code').isLength({ min: 6, max: 6 }).withMessage('Verification code must be 6 digits'),
   body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
 ];
 
