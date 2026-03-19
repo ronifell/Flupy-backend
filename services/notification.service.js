@@ -39,6 +39,20 @@ function isExpoToken(token) {
   }
 }
 
+/** Shown in notification tray / banner so users see it is from Flupy (not a generic Expo client). */
+const PUSH_APP_NAME = 'Flupy';
+
+function brandPushTitle(title) {
+  if (title == null || String(title).trim() === '') {
+    return PUSH_APP_NAME;
+  }
+  const t = String(title).trim();
+  if (/^flupy\s*([\u00b7\u2022]|\.|\||:|\-|\u2014)/i.test(t)) {
+    return t;
+  }
+  return PUSH_APP_NAME + ' \u00b7 ' + t;
+}
+
 /**
  * Send push notification to a specific user
  */
@@ -73,6 +87,9 @@ async function sendToUser(userId, notification) {
       return;
     }
 
+    const pushTitle = brandPushTitle(notification.title);
+    const pushBody = notification.body;
+
     if (debug) {
       console.log('[Push] sendToUser', {
         userId,
@@ -80,7 +97,7 @@ async function sendToUser(userId, notification) {
         total_tokens: tokens.length,
         expo_tokens: expoTokens.length,
         fcm_tokens: fcmTokens.length,
-        title: notification?.title,
+        title: pushTitle,
       });
     }
 
@@ -90,9 +107,10 @@ async function sendToUser(userId, notification) {
       const messages = expoTokens.map((t) => ({
         to: t.token,
         sound: 'default',
-        title: notification.title,
-        body: notification.body,
+        title: pushTitle,
+        body: pushBody,
         channelId: 'flupy_orders',
+        priority: 'high',
         data: notification.data || {},
       }));
 
@@ -126,8 +144,8 @@ async function sendToUser(userId, notification) {
       const messages = fcmTokens.map((t) => ({
         token: t.token,
         notification: {
-          title: notification.title,
-          body: notification.body,
+          title: pushTitle,
+          body: pushBody,
         },
         data: notification.data
           ? Object.fromEntries(Object.entries(notification.data).map(([k, v]) => [k, String(v)]))
