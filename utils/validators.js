@@ -33,6 +33,11 @@ const forgotPasswordRules = [
   body('email').isEmail().normalizeEmail().withMessage('Valid email is required'),
 ];
 
+const resetPasswordRules = [
+  body('token').notEmpty().withMessage('Reset token is required'),
+  body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+];
+
 // ── Order Validators ────────────────────────────────────────
 const createOrderRules = [
   body('service_id').isInt({ min: 1 }).withMessage('Valid service ID is required'),
@@ -99,6 +104,7 @@ module.exports = {
   registerRules,
   loginRules,
   forgotPasswordRules,
+  resetPasswordRules,
   createOrderRules,
   ratingRules,
   messageRules,
