@@ -291,7 +291,7 @@ async function listConversations(req, res) {
     const counterpart_id = isCustomer ? r.provider_id : r.customer_id;
     const counterpart_name = isCustomer ? r.provider_name : r.customer_name;
     let counterpart_avatar_url = isCustomer ? r.provider_avatar_url : r.customer_avatar_url;
-    const counterpart_rating = isCustomer ? r.provider_avg_rating : r.customer_avg_rating;
+    const counterpart_rating_raw = isCustomer ? r.provider_avg_rating : r.customer_avg_rating;
 
     // Ensure avatar URL is absolute
     if (counterpart_avatar_url && typeof counterpart_avatar_url === 'string' && !/^https?:\/\//i.test(counterpart_avatar_url)) {
@@ -307,7 +307,7 @@ async function listConversations(req, res) {
       counterpart_id,
       counterpart_name: counterpart_name || 'Unknown',
       counterpart_avatar_url: counterpart_avatar_url || null,
-      counterpart_rating: typeof counterpart_rating === 'number' ? Number(counterpart_rating) : null,
+      counterpart_rating: Number.isFinite(Number(counterpart_rating_raw)) ? Number(counterpart_rating_raw) : null,
       last_message_text: r.last_message_text || '',
       last_message_at: r.last_message_at || null,
       unread_count: Number(r.unread_count || 0),
