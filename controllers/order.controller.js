@@ -874,23 +874,31 @@ async function completeOrder(req, res) {
     [orderId]
   );
 
-  // Notify the other party
   const language = req.language || 'en';
-  const notifyUserId = userId === order.customer_id ? order.provider_id : order.customer_id;
-  if (notifyUserId) {
-    const toCustomer = notifyUserId === order.customer_id;
-    await notificationService.sendToUser(notifyUserId, {
-      title: t(
-        toCustomer ? 'notifications.serviceCompleted.title' : 'notifications.serviceCompletedProvider.title',
-        {},
-        language
-      ),
-      body: t(
-        toCustomer ? 'notifications.serviceCompleted.body' : 'notifications.serviceCompletedProvider.body',
-        {},
-        language
-      ),
-      data: pushOrderData({ type: 'order_completed', order_id: orderId }),
+
+  // Push to provider: order has been completed
+  if (order.provider_id) {
+    await notificationService.sendToUser(order.provider_id, {
+      title: t('notifications.serviceCompletedProvider.title', {}, language),
+      body: t('notifications.serviceCompletedProvider.body', {}, language),
+      data: pushOrderData({
+        type: 'order_completed',
+        order_id: orderId,
+        recipient_role: 'provider',
+      }),
+    });
+  }
+
+  // Push to customer: order completed + ask to rate the provider
+  if (order.customer_id) {
+    await notificationService.sendToUser(order.customer_id, {
+      title: t('notifications.serviceCompleted.title', {}, language),
+      body: t('notifications.serviceCompleted.body', {}, language),
+      data: pushOrderData({
+        type: 'order_completed',
+        order_id: orderId,
+        recipient_role: 'customer',
+      }),
     });
   }
 
