@@ -213,7 +213,7 @@ async function getUnreadConversations(req, res) {
          END
        ) as unread_count
      FROM order_conversations oc
-     JOIN service_orders so ON so.id = oc.order_id
+     LEFT JOIN service_orders so ON so.id = oc.order_id
      LEFT JOIN conversation_messages cm ON cm.conversation_id = oc.id
      LEFT JOIN users u_prov ON u_prov.id = oc.provider_id
      LEFT JOIN users u_cust ON u_cust.id = oc.customer_id
