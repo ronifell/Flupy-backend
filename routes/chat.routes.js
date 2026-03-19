@@ -14,6 +14,11 @@ router.get('/order/:orderId', asyncHandler(chatController.getConversation));
 router.get('/provider/:providerId', asyncHandler(chatController.getOrCreateProviderConversation));
 
 // Get messages for a conversation
+// (Order matters: more specific routes must be declared before `/:conversationId/messages`)
+// Get unread conversations for the current user
+router.get('/conversations/unread', asyncHandler(chatController.getUnreadConversations));
+
+// Get messages for a conversation
 router.get('/:conversationId/messages', asyncHandler(chatController.getMessages));
 
 // Send message (REST fallback)

@@ -180,6 +180,58 @@ async function sendMessage(req, res) {
 }
 
 /**
+ * Get unread conversations for the current user.
+ * Returns one row per conversation with:
+ * - unread_count: number of unread messages (sender != current user and is_read = 0)
+ * - last_message_text / last_message_at for UI preview + sorting
+ */
+async function getUnreadConversations(req, res) {
+  const userId = req.user.id;
+  const safeLimit = Math.min(parseInt(req.query.limit || '20', 10) || 20, 100);
+
+  const rows = await db.query(
+    `SELECT
+       oc.id as conversation_id,
+       oc.order_id,
+       oc.provider_id,
+       oc.customer_id,
+       so.status as order_status,
+       u_prov.full_name as provider_name,
+       u_cust.full_name as customer_name,
+       MAX(cm.created_at) as last_message_at,
+       (
+         SELECT cm2.message_text
+         FROM conversation_messages cm2
+         WHERE cm2.conversation_id = oc.id
+         ORDER BY cm2.created_at DESC
+         LIMIT 1
+       ) as last_message_text,
+       SUM(
+         CASE
+           WHEN cm.is_read = 0 AND cm.sender_id != ? THEN 1
+           ELSE 0
+         END
+       ) as unread_count
+     FROM order_conversations oc
+     JOIN service_orders so ON so.id = oc.order_id
+     LEFT JOIN conversation_messages cm ON cm.conversation_id = oc.id
+     LEFT JOIN users u_prov ON u_prov.id = oc.provider_id
+     LEFT JOIN users u_cust ON u_cust.id = oc.customer_id
+     WHERE oc.is_active = 1
+       AND (oc.customer_id = ? OR oc.provider_id = ?)
+     GROUP BY
+       oc.id, oc.order_id, oc.provider_id, oc.customer_id,
+       so.status, u_prov.full_name, u_cust.full_name
+     HAVING unread_count > 0
+     ORDER BY last_message_at DESC
+     LIMIT ?`,
+    [userId, userId, userId, safeLimit]
+  );
+
+  res.json({ conversations: rows || [] });
+}
+
+/**
  * Get or create a conversation between customer and provider (not tied to an order)
  */
 async function getOrCreateProviderConversation(req, res) {
@@ -246,4 +298,4 @@ async function getOrCreateProviderConversation(req, res) {
   res.json({ conversation });
 }
 
-module.exports = { getConversation, getMessages, sendMessage, getOrCreateProviderConversation };
+module.exports = { getConversation, getMessages, sendMessage, getUnreadConversations, getOrCreateProviderConversation };

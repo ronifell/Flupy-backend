@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const db = require('../config/database');
+const notificationService = require('../services/notification.service');
 
 /**
  * Socket.IO setup for real-time chat
@@ -132,6 +133,18 @@ function setupSocketIO(io) {
           order_id: conversation.order_id,
           sender_name: socket.user.full_name,
           message_text: message_text || 'Sent an attachment',
+        });
+
+        // Also send a push notification (so it appears as a system notification when the user is offline or not in the chat screen)
+        await notificationService.sendToUser(recipientId, {
+          title: 'New message',
+          body: message_text || 'Sent an attachment',
+          data: {
+            type: 'chat_message',
+            conversation_id,
+            order_id: conversation.order_id,
+            sender_name: socket.user.full_name,
+          },
         });
       } catch (error) {
         console.error('Socket send_message error:', error.message);
