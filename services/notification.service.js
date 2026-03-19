@@ -62,6 +62,18 @@ async function sendToUser(userId, notification) {
 
     const expoTokens = tokens.filter((t) => isExpoToken(t.token));
     const fcmTokens = tokens.filter((t) => !isExpoToken(t.token));
+    const debug = process.env.PUSH_DEBUG === '1';
+
+    if (debug) {
+      console.log('[Push] sendToUser', {
+        userId,
+        singleDeviceMode,
+        total_tokens: tokens.length,
+        expo_tokens: expoTokens.length,
+        fcm_tokens: fcmTokens.length,
+        title: notification?.title,
+      });
+    }
 
     // ── Expo Push (ExponentPushToken[...]) ────────────────────
     if (expoTokens.length > 0) {
@@ -71,6 +83,7 @@ async function sendToUser(userId, notification) {
         sound: 'default',
         title: notification.title,
         body: notification.body,
+        channelId: 'flupy_orders',
         data: notification.data || {},
       }));
 
@@ -78,11 +91,13 @@ async function sendToUser(userId, notification) {
       for (const chunk of chunks) {
         // Each ticket corresponds to chunk[i]
         const tickets = await expoClient.sendPushNotificationsAsync(chunk);
+        if (debug) console.log('[Push] Expo tickets:', tickets);
 
         for (let i = 0; i < tickets.length; i++) {
           const ticket = tickets[i];
           if (ticket.status === 'error') {
             const err = ticket.details?.error;
+            if (debug) console.warn('[Push] Expo error ticket:', ticket);
             if (err === 'DeviceNotRegistered') {
               const badToken = chunk[i]?.to;
               if (badToken) {
