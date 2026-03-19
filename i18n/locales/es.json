@@ -84,6 +84,18 @@
     "newMessage": {
       "title": "Nuevo Mensaje",
       "body": "Tienes un nuevo mensaje"
+    },
+    "orderStartedProvider": {
+      "title": "Pedido iniciado",
+      "body": "El cliente te aprobÃ³. El servicio estÃ¡ en curso."
+    },
+    "orderStartedCustomer": {
+      "title": "Pedido iniciado",
+      "body": "Tu pedido estÃ¡ en curso."
+    },
+    "serviceCompletedProvider": {
+      "title": "Pedido completado",
+      "body": "El pedido se marcÃ³ como completado."
     }
   },
   "errors": {

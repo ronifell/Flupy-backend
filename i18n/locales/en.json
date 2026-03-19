@@ -84,6 +84,18 @@
     "newMessage": {
       "title": "New Message",
       "body": "You have a new message"
+    },
+    "orderStartedProvider": {
+      "title": "Order started",
+      "body": "The customer approved you. The service is now in progress."
+    },
+    "orderStartedCustomer": {
+      "title": "Order started",
+      "body": "Your order is now in progress."
+    },
+    "serviceCompletedProvider": {
+      "title": "Order completed",
+      "body": "The order has been marked completed."
     }
   },
   "errors": {

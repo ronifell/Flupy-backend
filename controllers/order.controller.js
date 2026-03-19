@@ -5,6 +5,13 @@ const notificationService = require('../services/notification.service');
 const { buildFileUrl, parsePagination } = require('../utils/helpers');
 const { t } = require('../i18n');
 
+/** Push data: string values for Expo/Android */
+function pushOrderData(payload) {
+  return Object.fromEntries(
+    Object.entries(payload).map(([k, v]) => [k, v == null ? "" : String(v)])
+  );
+}
+
 /**
  * Create a new service order (Customer)
  */
@@ -308,10 +315,10 @@ async function claimOrder(req, res) {
 
   // Notify customer
   const language = req.language || 'en';
-  notificationService.sendToUser(order.customer_id, {
+  await notificationService.sendToUser(order.customer_id, {
     title: t('notifications.providerClaimed.title', {}, language),
     body: t('notifications.providerClaimed.body', {}, language),
-    data: { type: 'order_claimed', order_id: orderId },
+    data: pushOrderData({ type: 'order_claimed', order_id: orderId }),
   });
 
   res.json({ message: t('messages.orderClaimed', {}, language) });
@@ -345,10 +352,10 @@ async function acceptOrder(req, res) {
 
   // Notify customer
   const language = req.language || 'en';
-  notificationService.sendToUser(order.customer_id, {
+  await notificationService.sendToUser(order.customer_id, {
     title: t('notifications.providerAccepted.title', {}, language),
     body: t('notifications.providerAccepted.body', {}, language),
-    data: { type: 'order_accepted', order_id: orderId },
+    data: pushOrderData({ type: 'order_accepted', order_id: orderId }),
   });
 
   res.json({ message: t('messages.orderAccepted', {}, language) });
@@ -391,10 +398,10 @@ async function declineOrder(req, res) {
 
   // Notify customer
   const language = req.language || 'en';
-  notificationService.sendToUser(order.customer_id, {
+  await notificationService.sendToUser(order.customer_id, {
     title: t('notifications.providerReassignment.title', {}, language),
     body: t('notifications.providerReassignment.body', {}, language),
-    data: { type: 'provider_declined', order_id: orderId },
+    data: pushOrderData({ type: 'provider_declined', order_id: orderId }),
   });
 
   // Trigger reassignment
@@ -499,12 +506,16 @@ async function approveProvider(req, res) {
     [orderId]
   );
 
-  // Notify provider
   const language = req.language || 'en';
-  notificationService.sendToUser(provider_id, {
-    title: t('notifications.orderApproved.title', {}, language),
-    body: t('notifications.orderApproved.body', {}, language),
-    data: { type: 'order_approved', order_id: orderId },
+  await notificationService.sendToUser(provider_id, {
+    title: t('notifications.orderStartedProvider.title', {}, language),
+    body: t('notifications.orderStartedProvider.body', {}, language),
+    data: pushOrderData({ type: 'order_started', order_id: orderId, role: 'provider' }),
+  });
+  await notificationService.sendToUser(customerId, {
+    title: t('notifications.orderStartedCustomer.title', {}, language),
+    body: t('notifications.orderStartedCustomer.body', {}, language),
+    data: pushOrderData({ type: 'order_started', order_id: orderId, role: 'customer' }),
   });
 
   res.json({ 
@@ -836,10 +847,19 @@ async function completeOrder(req, res) {
   const language = req.language || 'en';
   const notifyUserId = userId === order.customer_id ? order.provider_id : order.customer_id;
   if (notifyUserId) {
-    notificationService.sendToUser(notifyUserId, {
-      title: t('notifications.serviceCompleted.title', {}, language),
-      body: t('notifications.serviceCompleted.body', {}, language),
-      data: { type: 'order_completed', order_id: orderId },
+    const toCustomer = notifyUserId === order.customer_id;
+    await notificationService.sendToUser(notifyUserId, {
+      title: t(
+        toCustomer ? 'notifications.serviceCompleted.title' : 'notifications.serviceCompletedProvider.title',
+        {},
+        language
+      ),
+      body: t(
+        toCustomer ? 'notifications.serviceCompleted.body' : 'notifications.serviceCompletedProvider.body',
+        {},
+        language
+      ),
+      data: pushOrderData({ type: 'order_completed', order_id: orderId }),
     });
   }
 
@@ -873,10 +893,10 @@ async function cancelOrder(req, res) {
   const language = req.language || 'en';
   const notifyUserId = userId === order.customer_id ? order.provider_id : order.customer_id;
   if (notifyUserId) {
-    notificationService.sendToUser(notifyUserId, {
+    await notificationService.sendToUser(notifyUserId, {
       title: t('notifications.orderCanceled.title', {}, language),
       body: t('notifications.orderCanceled.body', {}, language),
-      data: { type: 'order_canceled', order_id: orderId },
+      data: pushOrderData({ type: 'order_canceled', order_id: orderId }),
     });
   }
 
