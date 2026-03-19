@@ -223,7 +223,7 @@ async function getUnreadConversations(req, res) {
        oc.id, oc.order_id, oc.provider_id, oc.customer_id,
        so.status, u_prov.full_name, u_cust.full_name
      HAVING unread_count > 0
-     ORDER BY last_message_at DESC
+     ORDER BY MAX(cm.created_at) DESC
      LIMIT ?`,
     [userId, userId, userId, safeLimit]
   );
@@ -276,7 +276,7 @@ async function listConversations(req, res) {
        so.status,
        u_prov.full_name, u_prov.avatar_url,
        u_cust.full_name, u_cust.avatar_url
-     ORDER BY COALESCE(last_message_at, oc.created_at) DESC
+     ORDER BY COALESCE(MAX(cm.created_at), oc.created_at) DESC
      LIMIT ? OFFSET ?`,
     [userId, userId, userId, safeLimit, offset]
   );
