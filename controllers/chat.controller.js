@@ -250,6 +250,8 @@ async function listConversations(req, res) {
        u_prov.avatar_url as provider_avatar_url,
        u_cust.full_name as customer_name,
        u_cust.avatar_url as customer_avatar_url,
+       rs_prov.average_rating as provider_avg_rating,
+       rs_cust.average_rating as customer_avg_rating,
        MAX(cm.created_at) as last_message_at,
        (
          SELECT cm2.message_text
@@ -269,13 +271,15 @@ async function listConversations(req, res) {
      LEFT JOIN conversation_messages cm ON cm.conversation_id = oc.id
      LEFT JOIN users u_prov ON u_prov.id = oc.provider_id
      LEFT JOIN users u_cust ON u_cust.id = oc.customer_id
+     LEFT JOIN user_rating_summary rs_prov ON rs_prov.user_id = oc.provider_id
+     LEFT JOIN user_rating_summary rs_cust ON rs_cust.user_id = oc.customer_id
      WHERE oc.is_active = 1
        AND (oc.customer_id = ? OR oc.provider_id = ?)
      GROUP BY
        oc.id, oc.order_id, oc.provider_id, oc.customer_id,
        so.status,
-       u_prov.full_name, u_prov.avatar_url,
-       u_cust.full_name, u_cust.avatar_url
+       u_prov.full_name, u_prov.avatar_url, rs_prov.average_rating,
+       u_cust.full_name, u_cust.avatar_url, rs_cust.average_rating
      ORDER BY COALESCE(MAX(cm.created_at), oc.created_at) DESC
      LIMIT ? OFFSET ?`,
     [userId, userId, userId, safeLimit, offset]
@@ -286,7 +290,13 @@ async function listConversations(req, res) {
     const isCustomer = r.customer_id === userId;
     const counterpart_id = isCustomer ? r.provider_id : r.customer_id;
     const counterpart_name = isCustomer ? r.provider_name : r.customer_name;
-    const counterpart_avatar_url = isCustomer ? r.provider_avatar_url : r.customer_avatar_url;
+    let counterpart_avatar_url = isCustomer ? r.provider_avatar_url : r.customer_avatar_url;
+    const counterpart_rating = isCustomer ? r.provider_avg_rating : r.customer_avg_rating;
+
+    // Ensure avatar URL is absolute
+    if (counterpart_avatar_url && typeof counterpart_avatar_url === 'string' && !/^https?:\/\//i.test(counterpart_avatar_url)) {
+      counterpart_avatar_url = buildFileUrl(req, counterpart_avatar_url);
+    }
 
     return {
       conversation_id: r.conversation_id,
@@ -297,6 +307,7 @@ async function listConversations(req, res) {
       counterpart_id,
       counterpart_name: counterpart_name || 'Unknown',
       counterpart_avatar_url: counterpart_avatar_url || null,
+      counterpart_rating: typeof counterpart_rating === 'number' ? Number(counterpart_rating) : null,
       last_message_text: r.last_message_text || '',
       last_message_at: r.last_message_at || null,
       unread_count: Number(r.unread_count || 0),
