@@ -176,6 +176,16 @@ async function sendMessage(req, res) {
     data: { type: 'new_message', conversation_id: conversationId, order_id: conversation.order_id },
   });
 
+  // Single-device push testing mode:
+  // also notify the sender device so push can be validated without a second device.
+  if (process.env.PUSH_SELF_TEST_MODE === '1') {
+    notificationService.sendToUser(userId, {
+      title: 'Message sent (test)',
+      body: `You sent: ${message_text || 'Sent an attachment'}`,
+      data: { type: 'self_message_test', conversation_id: conversationId, order_id: conversation.order_id },
+    });
+  }
+
   res.status(201).json({ message: t('messages.messageSent', {}, language), message_id: messageId });
 }
 

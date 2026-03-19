@@ -58,11 +58,16 @@ async function sendToUser(userId, notification) {
           [userId]
         );
 
-    if (tokens.length === 0) return;
-
     const expoTokens = tokens.filter((t) => isExpoToken(t.token));
     const fcmTokens = tokens.filter((t) => !isExpoToken(t.token));
     const debug = process.env.PUSH_DEBUG === '1';
+
+    if (tokens.length === 0) {
+      if (debug) {
+        console.log('[Push] No active tokens for user', { userId, singleDeviceMode });
+      }
+      return;
+    }
 
     if (debug) {
       console.log('[Push] sendToUser', {
