@@ -96,6 +96,10 @@
     "serviceCompletedProvider": {
       "title": "Order completed",
       "body": "The order has been marked completed."
+    },
+    "newRatingFromCustomer": {
+      "title": "New rating",
+      "body": "A customer has left a star rating for you."
     }
   },
   "errors": {

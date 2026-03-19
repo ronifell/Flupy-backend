@@ -1,15 +1,13 @@
 const db = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
+const notificationService = require('../services/notification.service');
+const { t } = require('../i18n');
 
-/**
- * Submit a rating for an order
- */
 async function submitRating(req, res) {
   const orderId = req.params.orderId;
   const raterId = req.user.id;
   const { rating, comment } = req.body;
 
-  // Get order
   const [order] = await db.query(
     `SELECT * FROM service_orders WHERE id = ? AND status IN ('COMPLETED', 'CANCELED')`,
     [orderId]
@@ -19,7 +17,6 @@ async function submitRating(req, res) {
     throw new AppError('Order not found or not eligible for rating', 404);
   }
 
-  // Determine who is being rated
   let ratedId;
   if (raterId === order.customer_id) {
     ratedId = order.provider_id;
@@ -33,7 +30,6 @@ async function submitRating(req, res) {
     throw new AppError('No user to rate', 400);
   }
 
-  // Check for duplicate rating
   const existing = await db.query(
     'SELECT id FROM order_ratings WHERE order_id = ? AND rater_id = ?',
     [orderId, raterId]
@@ -43,14 +39,12 @@ async function submitRating(req, res) {
     throw new AppError('You have already rated this order', 409);
   }
 
-  // Insert rating
   await db.query(
     `INSERT INTO order_ratings (order_id, rater_id, rated_id, rating, comment)
      VALUES (?, ?, ?, ?, ?)`,
     [orderId, raterId, ratedId, rating, comment || null]
   );
 
-  // Update rating summary
   await db.query(
     `INSERT INTO user_rating_summary (user_id, average_rating, total_ratings, total_stars)
      VALUES (?, ?, 1, ?)
@@ -61,7 +55,6 @@ async function submitRating(req, res) {
     [ratedId, rating, rating, rating, rating]
   );
 
-  // Recalculate accurately
   const [summary] = await db.query(
     `SELECT AVG(rating) as avg_rating, COUNT(*) as count, SUM(rating) as total
      FROM order_ratings WHERE rated_id = ?`,
@@ -76,13 +69,27 @@ async function submitRating(req, res) {
   );
 
   const language = req.language || 'en';
-  const { t } = require('../i18n');
+
+  if (raterId === order.customer_id && order.provider_id) {
+    try {
+      await notificationService.sendToUser(order.provider_id, {
+        title: t('notifications.newRatingFromCustomer.title', {}, language),
+        body: t('notifications.newRatingFromCustomer.body', {}, language),
+        data: Object.fromEntries(
+          Object.entries({
+            type: 'new_rating',
+            order_id: orderId,
+          }).map(([k, v]) => [k, v == null ? '' : String(v)])
+        ),
+      });
+    } catch (err) {
+      console.warn('Push notification (new rating) failed:', err.message);
+    }
+  }
+
   res.status(201).json({ message: t('messages.ratingSubmitted', {}, language) });
 }
 
-/**
- * Get ratings for a user
- */
 async function getUserRatings(req, res) {
   const userId = req.params.userId || req.user.id;
 

@@ -96,6 +96,10 @@
     "serviceCompletedProvider": {
       "title": "Pedido completado",
       "body": "El pedido se marcÃ³ como completado."
+    },
+    "newRatingFromCustomer": {
+      "title": "Nueva valoraciÃ³n",
+      "body": "Un cliente te ha dejado una valoraciÃ³n con estrellas."
     }
   },
   "errors": {
