@@ -575,18 +575,26 @@ async function searchProvidersCatalog(req, res) {
 
   const safeLimit = Math.min(parseInt(limit || '100', 10) || 100, 200);
   const search = (q || '').trim();
-  const hasCoords = latitude != null && longitude != null && latitude !== '' && longitude !== '';
-  const lat = hasCoords ? parseFloat(latitude) : null;
-  const lng = hasCoords ? parseFloat(longitude) : null;
-
-  if (hasCoords) {
+  // Normalize coordinates (accept numbers or numeric strings; ignore if invalid)
+  let hasCoords = false;
+  let lat = null;
+  let lng = null;
+  if (
+    latitude !== undefined && longitude !== undefined &&
+    latitude !== null && longitude !== null &&
+    String(latitude).trim() !== '' && String(longitude).trim() !== '' &&
+    String(latitude).toLowerCase() !== 'null' && String(longitude).toLowerCase() !== 'null'
+  ) {
+    lat = parseFloat(latitude);
+    lng = parseFloat(longitude);
     if (
-      isNaN(lat) || isNaN(lng) ||
-      lat < -90 || lat > 90 ||
-      lng < -180 || lng > 180
+      !isNaN(lat) && !isNaN(lng) &&
+      lat >= -90 && lat <= 90 &&
+      lng >= -180 && lng <= 180
     ) {
-      throw new AppError('Invalid latitude or longitude values', 400);
+      hasCoords = true;
     }
+    // If invalid, silently ignore coords instead of failing the whole request
   }
 
   // Search providers that:
