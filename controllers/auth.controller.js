@@ -118,6 +118,36 @@ async function login(req, res) {
 }
 
 /**
+ * Forgot password request
+ * NOTE: We intentionally return the same success response whether or not
+ * the email exists to prevent account enumeration.
+ */
+async function forgotPassword(req, res) {
+  const { email } = req.body;
+  const language = req.language || 'en';
+
+  try {
+    const [user] = await db.query('SELECT id, email FROM users WHERE email = ?', [email]);
+
+    // TODO: integrate real email delivery + reset token flow.
+    // For now, keep endpoint behavior stable for the mobile app and avoid leaking
+    // whether an account exists.
+    if (user) {
+      console.log('[Auth] Forgot password requested for user:', user.email);
+    } else {
+      console.log('[Auth] Forgot password requested for unknown email');
+    }
+  } catch (error) {
+    // Swallow internal errors for this endpoint to avoid email enumeration patterns.
+    console.warn('[Auth] Forgot password flow warning:', error.message);
+  }
+
+  res.json({
+    message: t('messages.resetLinkSent', {}, language),
+  });
+}
+
+/**
  * Get current user's profile
  */
 async function getProfile(req, res) {
@@ -201,4 +231,4 @@ function generateToken(userId, role) {
   );
 }
 
-module.exports = { register, login, getProfile, updateProfile, registerPushToken };
+module.exports = { register, login, forgotPassword, getProfile, updateProfile, registerPushToken };

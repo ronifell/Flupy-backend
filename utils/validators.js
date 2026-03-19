@@ -29,6 +29,10 @@ const loginRules = [
   body('password').notEmpty().withMessage('Password is required'),
 ];
 
+const forgotPasswordRules = [
+  body('email').isEmail().normalizeEmail().withMessage('Valid email is required'),
+];
+
 // ── Order Validators ────────────────────────────────────────
 const createOrderRules = [
   body('service_id').isInt({ min: 1 }).withMessage('Valid service ID is required'),
@@ -94,6 +98,7 @@ module.exports = {
   validate,
   registerRules,
   loginRules,
+  forgotPasswordRules,
   createOrderRules,
   ratingRules,
   messageRules,

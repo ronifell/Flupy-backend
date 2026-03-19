@@ -24,7 +24,8 @@
     "appointmentDeclined": "Appointment declined, reassignment triggered",
     "documentStatus": "Document {{status}}",
     "membershipCanceled": "Membership will be canceled at the end of the billing period",
-    "membershipCheckComplete": "Membership check complete"
+    "membershipCheckComplete": "Membership check complete",
+    "resetLinkSent": "If that email exists, a password reset link will be sent shortly."
   },
   "notifications": {
     "newOrderAssigned": {

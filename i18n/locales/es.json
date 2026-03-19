@@ -24,7 +24,8 @@
     "appointmentDeclined": "Cita rechazada, reasignación activada",
     "documentStatus": "Documento {{status}}",
     "membershipCanceled": "La membresía será cancelada al final del período de facturación",
-    "membershipCheckComplete": "Verificación de membresía completada"
+    "membershipCheckComplete": "Verificación de membresía completada",
+    "resetLinkSent": "Si ese correo existe, se enviará pronto un enlace para restablecer la contraseña."
   },
   "notifications": {
     "newOrderAssigned": {
