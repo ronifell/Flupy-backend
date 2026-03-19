@@ -3,6 +3,7 @@ const { Expo } = require('expo-server-sdk');
 
 let firebaseAdmin = null;
 let expo = null;
+let singleDeviceModeWarned = false;
 
 /**
  * Initialize Firebase Admin SDK (lazy load)
@@ -43,11 +44,14 @@ function isExpoToken(token) {
  */
 async function sendToUser(userId, notification) {
   try {
-    // In a single-device test scenario, the same Expo token gets reassigned
-    // to the last logged-in account because `push_tokens.token` is unique.
-    // When enabled, we deliver to the active token(s) regardless of user_id
-    // so notifications show up during the test.
+    // Production / two devices: omit PUSH_SINGLE_DEVICE_MODE or set "0".
+    // Notifications go only to tokens for userId (the recipient).
+    // PUSH_SINGLE_DEVICE_MODE=1 only for one phone switching accounts (shared Expo token).
     const singleDeviceMode = process.env.PUSH_SINGLE_DEVICE_MODE === '1';
+    if (singleDeviceMode && !singleDeviceModeWarned) {
+      singleDeviceModeWarned = true;
+      console.warn('[Push] PUSH_SINGLE_DEVICE_MODE=1 ignores recipient user_id. Set to 0 for two-device chat.');
+    }
 
     const tokens = singleDeviceMode
       ? await db.query(

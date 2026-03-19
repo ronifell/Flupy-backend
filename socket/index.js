@@ -147,21 +147,6 @@ function setupSocketIO(io) {
           },
         });
 
-        // Single-device push testing mode:
-        // also send a notification back to the sender so push can be
-        // tested without having access to the recipient device.
-        if (process.env.PUSH_SELF_TEST_MODE === '1') {
-          await notificationService.sendToUser(userId, {
-            title: 'Message sent (test)',
-            body: `You sent: ${message_text || 'Sent an attachment'}`,
-            data: {
-              type: 'self_message_test',
-              conversation_id,
-              order_id: conversation.order_id,
-              sender_name: socket.user.full_name,
-            },
-          });
-        }
       } catch (error) {
         console.error('Socket send_message error:', error.message);
         socket.emit('error', { message: 'Failed to send message' });
