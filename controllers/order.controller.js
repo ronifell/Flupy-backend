@@ -25,6 +25,37 @@ async function createOrder(req, res) {
   // Ensure description is never NULL for DB integrity (column is NOT NULL in schema)
   const safeDescription = (description || '').toString().trim();
 
+  let finalLat =
+    latitude != null && String(latitude).trim() !== '' ? parseFloat(latitude, 10) : null;
+  let finalLng =
+    longitude != null && String(longitude).trim() !== '' ? parseFloat(longitude, 10) : null;
+  if (finalLat != null && Number.isNaN(finalLat)) finalLat = null;
+  if (finalLng != null && Number.isNaN(finalLng)) finalLng = null;
+
+  const addrId =
+    address_id != null && String(address_id).trim() !== '' ? parseInt(String(address_id), 10) : null;
+  if ((finalLat == null || finalLng == null) && addrId) {
+    const [addr] = await db.query(
+      'SELECT latitude, longitude FROM user_addresses WHERE id = ? AND user_id = ?',
+      [addrId, customerId]
+    );
+    if (addr && addr.latitude != null && addr.longitude != null) {
+      const alat = parseFloat(addr.latitude, 10);
+      const alng = parseFloat(addr.longitude, 10);
+      if (!Number.isNaN(alat) && !Number.isNaN(alng)) {
+        finalLat = alat;
+        finalLng = alng;
+      }
+    }
+  }
+
+  if (finalLat == null || finalLng == null || Number.isNaN(finalLat) || Number.isNaN(finalLng)) {
+    throw new AppError(
+      'Valid location is required. Save an address with map coordinates or enable GPS.',
+      400
+    );
+  }
+
   const conn = await db.getConnection();
   try {
     await conn.beginTransaction();
@@ -39,9 +70,9 @@ async function createOrder(req, res) {
         service_id || null,
         safeDescription, // never NULL
         order_mode || 'ASAP',
-        latitude || null,
-        longitude || null,
-        address_id || null,
+        finalLat,
+        finalLng,
+        addrId || null,
         address_text || null,
       ]
     );
