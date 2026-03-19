@@ -724,7 +724,8 @@ async function searchProvidersCatalog(req, res) {
   );
 
   // Apply sorting
-  const sortBy = sort_by || 'rating'; // Default to rating
+  // Priority: proximity first, then rating, then certification status
+  const sortBy = sort_by || 'proximity'; // Default to proximity
   if (sortBy === 'proximity' && hasCoords) {
     // Sort by distance (closest first), then rating
     providers.sort((a, b) => {
@@ -732,39 +733,56 @@ async function searchProvidersCatalog(req, res) {
       if (a.distance_km === null) return 1;
       if (b.distance_km === null) return -1;
       if (a.distance_km !== b.distance_km) return a.distance_km - b.distance_km;
-      // If same distance, sort by rating
+      // If same distance, sort by rating (higher rating first)
       return (b.average_rating || 0) - (a.average_rating || 0);
     });
   } else if (sortBy === 'rating') {
-    // Sort by rating (highest first), then number of ratings, then distance if available
+    // Sort by rating (highest first), then proximity (closer first), then certification status
     providers.sort((a, b) => {
       if (a.average_rating !== b.average_rating) {
         return (b.average_rating || 0) - (a.average_rating || 0);
       }
-      if (a.total_ratings !== b.total_ratings) {
-        return (b.total_ratings || 0) - (a.total_ratings || 0);
+      // If same rating, sort by proximity (closer first) if available
+      if (hasCoords) {
+        if (a.distance_km === null && b.distance_km === null) {
+          // Both null: certification is the next priority
+          if (a.verification_score !== b.verification_score) {
+            return b.verification_score - a.verification_score;
+          }
+          return (b.total_ratings || 0) - (a.total_ratings || 0);
+        }
+        if (a.distance_km === null) return 1;
+        if (b.distance_km === null) return -1;
+        if (a.distance_km !== b.distance_km) {
+          return a.distance_km - b.distance_km;
+        }
       }
-      // If same rating, sort by distance if available
-      if (hasCoords && a.distance_km !== null && b.distance_km !== null) {
-        return a.distance_km - b.distance_km;
+      // If same rating and same distance (or no coords), certification is last
+      if (a.verification_score !== b.verification_score) {
+        return b.verification_score - a.verification_score;
       }
-      return 0;
+      return (b.total_ratings || 0) - (a.total_ratings || 0);
     });
   } else if (sortBy === 'verification') {
-    // Sort by verification score (both documents = 2, one = 1, none = 0), then rating, then distance
+    // Sort by verification score (both documents = 2, one = 1, none = 0), then proximity, then rating
     providers.sort((a, b) => {
       if (a.verification_score !== b.verification_score) {
         return b.verification_score - a.verification_score;
       }
-      // If same verification, sort by rating
-      if (a.average_rating !== b.average_rating) {
-        return (b.average_rating || 0) - (a.average_rating || 0);
+      // If same verification, sort by proximity (closer first) if available
+      if (hasCoords) {
+        if (a.distance_km === null && b.distance_km === null) {
+          // Both null, use rating as tiebreaker
+          return (b.average_rating || 0) - (a.average_rating || 0);
+        }
+        if (a.distance_km === null) return 1;
+        if (b.distance_km === null) return -1;
+        if (a.distance_km !== b.distance_km) {
+          return a.distance_km - b.distance_km;
+        }
       }
-      // If same rating, sort by distance if available
-      if (hasCoords && a.distance_km !== null && b.distance_km !== null) {
-        return a.distance_km - b.distance_km;
-      }
-      return 0;
+      // If same verification and same distance (or no coords), sort by rating
+      return (b.average_rating || 0) - (a.average_rating || 0);
     });
   }
 
