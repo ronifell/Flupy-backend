@@ -15,6 +15,9 @@ router.get('/provider/:providerId', asyncHandler(chatController.getOrCreateProvi
 
 // Get messages for a conversation
 // (Order matters: more specific routes must be declared before `/:conversationId/messages`)
+// List conversations (address book)
+router.get('/conversations', asyncHandler(chatController.listConversations));
+
 // Get unread conversations for the current user
 router.get('/conversations/unread', asyncHandler(chatController.getUnreadConversations));
 

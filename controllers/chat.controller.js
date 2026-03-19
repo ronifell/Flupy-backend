@@ -232,6 +232,81 @@ async function getUnreadConversations(req, res) {
 }
 
 /**
+ * List conversations ("address book") for the current user with last message + unread_count.
+ */
+async function listConversations(req, res) {
+  const userId = req.user.id;
+  const safeLimit = Math.min(parseInt(req.query.limit || '50', 10) || 50, 100);
+  const offset = Math.max(parseInt(req.query.offset || '0', 10) || 0, 0);
+
+  const rows = await db.query(
+    `SELECT
+       oc.id as conversation_id,
+       oc.order_id,
+       oc.provider_id,
+       oc.customer_id,
+       so.status as order_status,
+       u_prov.full_name as provider_name,
+       u_prov.avatar_url as provider_avatar_url,
+       u_cust.full_name as customer_name,
+       u_cust.avatar_url as customer_avatar_url,
+       MAX(cm.created_at) as last_message_at,
+       (
+         SELECT cm2.message_text
+         FROM conversation_messages cm2
+         WHERE cm2.conversation_id = oc.id
+         ORDER BY cm2.created_at DESC
+         LIMIT 1
+       ) as last_message_text,
+       SUM(
+         CASE
+           WHEN cm.is_read = 0 AND cm.sender_id != ? THEN 1
+           ELSE 0
+         END
+       ) as unread_count
+     FROM order_conversations oc
+     LEFT JOIN service_orders so ON so.id = oc.order_id
+     LEFT JOIN conversation_messages cm ON cm.conversation_id = oc.id
+     LEFT JOIN users u_prov ON u_prov.id = oc.provider_id
+     LEFT JOIN users u_cust ON u_cust.id = oc.customer_id
+     WHERE oc.is_active = 1
+       AND (oc.customer_id = ? OR oc.provider_id = ?)
+     GROUP BY
+       oc.id, oc.order_id, oc.provider_id, oc.customer_id,
+       so.status,
+       u_prov.full_name, u_prov.avatar_url,
+       u_cust.full_name, u_cust.avatar_url
+     ORDER BY COALESCE(last_message_at, oc.created_at) DESC
+     LIMIT ? OFFSET ?`,
+    [userId, userId, userId, safeLimit, offset]
+  );
+
+  // Normalize for client: provide counterpart info
+  const conversations = (rows || []).map((r) => {
+    const isCustomer = r.customer_id === userId;
+    const counterpart_id = isCustomer ? r.provider_id : r.customer_id;
+    const counterpart_name = isCustomer ? r.provider_name : r.customer_name;
+    const counterpart_avatar_url = isCustomer ? r.provider_avatar_url : r.customer_avatar_url;
+
+    return {
+      conversation_id: r.conversation_id,
+      order_id: r.order_id || null,
+      order_status: r.order_status || null,
+      customer_id: r.customer_id,
+      provider_id: r.provider_id,
+      counterpart_id,
+      counterpart_name: counterpart_name || 'Unknown',
+      counterpart_avatar_url: counterpart_avatar_url || null,
+      last_message_text: r.last_message_text || '',
+      last_message_at: r.last_message_at || null,
+      unread_count: Number(r.unread_count || 0),
+    };
+  });
+
+  res.json({ conversations });
+}
+
+/**
  * Get or create a conversation between customer and provider (not tied to an order)
  */
 async function getOrCreateProviderConversation(req, res) {
@@ -298,4 +373,4 @@ async function getOrCreateProviderConversation(req, res) {
   res.json({ conversation });
 }
 
-module.exports = { getConversation, getMessages, sendMessage, getUnreadConversations, getOrCreateProviderConversation };
+module.exports = { getConversation, getMessages, sendMessage, listConversations, getUnreadConversations, getOrCreateProviderConversation };
