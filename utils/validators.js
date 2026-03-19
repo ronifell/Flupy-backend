@@ -39,6 +39,11 @@ const resetPasswordRules = [
   body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
 ];
 
+const verifyResetCodeRules = [
+  body('email').isEmail().normalizeEmail().withMessage('Valid email is required'),
+  body('code').isLength({ min: 6, max: 6 }).withMessage('Verification code must be 6 digits'),
+];
+
 // ── Order Validators ────────────────────────────────────────
 const createOrderRules = [
   body('service_id').isInt({ min: 1 }).withMessage('Valid service ID is required'),
@@ -106,6 +111,7 @@ module.exports = {
   loginRules,
   forgotPasswordRules,
   resetPasswordRules,
+  verifyResetCodeRules,
   createOrderRules,
   ratingRules,
   messageRules,

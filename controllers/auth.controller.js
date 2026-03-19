@@ -152,29 +152,7 @@ async function resetPassword(req, res) {
   const language = req.language || 'en';
 
   await ensurePasswordResetCodesTable();
-
-  const [user] = await db.query('SELECT id FROM users WHERE email = ?', [email]);
-  if (!user?.id) {
-    throw new AppError('Invalid code or expired code', 400);
-  }
-
-  const codeHash = sha256(code);
-  const [record] = await db.query(
-    `SELECT id, user_id, expires_at, used
-     FROM password_reset_codes
-     WHERE user_id = ? AND code_hash = ?
-     LIMIT 1`,
-    [user.id, codeHash]
-  );
-
-  if (!record || Number(record.used) === 1) {
-    throw new AppError('Invalid code or expired code', 400);
-  }
-
-  const expiresAt = record.expires_at ? new Date(record.expires_at) : null;
-  if (!expiresAt || expiresAt.getTime() < Date.now()) {
-    throw new AppError('Invalid code or expired code', 400);
-  }
+  const { user, record } = await getValidResetCodeRecord(email, code);
 
   const passwordHash = await bcrypt.hash(password, 12);
 
@@ -196,6 +174,16 @@ async function resetPassword(req, res) {
   }
 
   res.json({ message: t('messages.resetPasswordSuccess', {}, language) });
+}
+
+/**
+ * Verify reset code before showing new password input in the app.
+ */
+async function verifyResetCode(req, res) {
+  const { email, code } = req.body;
+  await ensurePasswordResetCodesTable();
+  await getValidResetCodeRecord(email, code);
+  res.json({ valid: true });
 }
 
 /**
@@ -323,10 +311,38 @@ async function createPasswordResetCodeForUser(userId) {
   return code;
 }
 
+async function getValidResetCodeRecord(email, code) {
+  const [user] = await db.query('SELECT id FROM users WHERE email = ?', [email]);
+  if (!user?.id) {
+    throw new AppError('Invalid code or expired code', 400);
+  }
+
+  const codeHash = sha256(code);
+  const [record] = await db.query(
+    `SELECT id, user_id, expires_at, used
+     FROM password_reset_codes
+     WHERE user_id = ? AND code_hash = ?
+     LIMIT 1`,
+    [user.id, codeHash]
+  );
+
+  if (!record || Number(record.used) === 1) {
+    throw new AppError('Invalid code or expired code', 400);
+  }
+
+  const expiresAt = record.expires_at ? new Date(record.expires_at) : null;
+  if (!expiresAt || expiresAt.getTime() < Date.now()) {
+    throw new AppError('Invalid code or expired code', 400);
+  }
+
+  return { user, record };
+}
+
 module.exports = {
   register,
   login,
   forgotPassword,
+  verifyResetCode,
   resetPassword,
   getProfile,
   updateProfile,
