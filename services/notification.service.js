@@ -23,10 +23,20 @@ function getFirebaseAdmin() {
  */
 async function sendToUser(userId, notification) {
   try {
-    const tokens = await db.query(
-      'SELECT token, platform FROM push_tokens WHERE user_id = ? AND is_active = 1',
-      [userId]
-    );
+    // In a single-device test scenario, the same Expo token gets reassigned
+    // to the last logged-in account because `push_tokens.token` is unique.
+    // When enabled, we deliver to the active token(s) regardless of user_id
+    // so notifications show up during the test.
+    const singleDeviceMode = process.env.PUSH_SINGLE_DEVICE_MODE === '1';
+
+    const tokens = singleDeviceMode
+      ? await db.query(
+          'SELECT token, platform FROM push_tokens WHERE is_active = 1 ORDER BY updated_at DESC LIMIT 5'
+        )
+      : await db.query(
+          'SELECT token, platform FROM push_tokens WHERE user_id = ? AND is_active = 1',
+          [userId]
+        );
 
     if (tokens.length === 0) return;
 
