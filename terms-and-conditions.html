@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Términos y Condiciones — ServiConnect</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --primary: #1a4d2e;
+    --primary-light: #2d7a4a;
+    --primary-pale: #e8f5ee;
+    --accent: #f59e0b;
+    --accent-hover: #d97706;
+    --bg: #fafaf8;
+    --surface: #ffffff;
+    --text: #1a1a1a;
+    --text-muted: #6b7280;
+    --text-light: #9ca3af;
+    --border: #e5e7eb;
+    --border-light: #f0f0ee;
+    --danger: #dc2626;
+    --radius: 14px;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
+    --shadow-md: 0 4px 20px rgba(0,0,0,0.08);
+    --shadow-lg: 0 12px 40px rgba(0,0,0,0.12);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Sans', -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    line-height: 1.6;
+  }
+
+  /* Subtle background pattern */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(circle at 20% 20%, rgba(26,77,46,0.03) 0%, transparent 50%),
+      radial-gradient(circle at 80% 80%, rgba(245,158,11,0.03) 0%, transparent 50%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 680px;
+    background: var(--surface);
+    border-radius: 20px;
+    box-shadow: var(--shadow-lg);
+    overflow: hidden;
+    animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(30px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Header */
+  .header {
+    background: linear-gradient(135deg, var(--primary) 0%, #0d3320 100%);
+    padding: 36px 32px 30px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .header::after {
+    content: '';
+    position: absolute;
+    top: -40px;
+    right: -40px;
+    width: 160px;
+    height: 160px;
+    border-radius: 50%;
+    background: rgba(245,158,11,0.1);
+  }
+
+  .header-icon {
+    width: 48px;
+    height: 48px;
+    background: rgba(255,255,255,0.15);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 16px;
+    backdrop-filter: blur(10px);
+  }
+
+  .header-icon svg {
+    width: 24px;
+    height: 24px;
+    color: var(--accent);
+  }
+
+  .header h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: 26px;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 6px;
+    letter-spacing: -0.3px;
+  }
+
+  .header p {
+    color: rgba(255,255,255,0.7);
+    font-size: 14px;
+    font-weight: 400;
+  }
+
+  .version-badge {
+    display: inline-block;
+    background: rgba(255,255,255,0.12);
+    color: rgba(255,255,255,0.8);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 20px;
+    margin-top: 12px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+
+  /* Content area */
+  .content {
+    padding: 28px 32px;
+  }
+
+  .scroll-hint {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    background: var(--primary-pale);
+    border-radius: 10px;
+    margin-bottom: 20px;
+    font-size: 13px;
+    color: var(--primary);
+    font-weight: 500;
+  }
+
+  .scroll-hint svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    animation: bounce 2s infinite;
+  }
+
+  @keyframes bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(3px); }
+  }
+
+  /* Terms scroll area */
+  .terms-scroll {
+    height: 420px;
+    overflow-y: auto;
+    position: relative;
+    z-index: 1;
+    padding: 24px;
+    background: #fcfcfa;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 24px;
+    scroll-behavior: smooth;
+  }
+
+  .terms-scroll::-webkit-scrollbar { width: 6px; }
+  .terms-scroll::-webkit-scrollbar-track { background: transparent; }
+  .terms-scroll::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 10px;
+  }
+  .terms-scroll::-webkit-scrollbar-thumb:hover { background: var(--text-light); }
+
+  /* Terms content styling */
+  .terms-content h2 {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--primary);
+    margin: 28px 0 10px;
+    padding-bottom: 6px;
+    border-bottom: 2px solid var(--primary-pale);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .terms-content h2:first-child { margin-top: 0; }
+
+  .terms-content h2 .num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    background: var(--primary);
+    color: #fff;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  .terms-content p {
+    font-size: 13.5px;
+    color: #374151;
+    margin-bottom: 10px;
+    line-height: 1.75;
+  }
+
+  .terms-content .highlight-box {
+    background: linear-gradient(135deg, #fef3c7, #fde68a33);
+    border-left: 3px solid var(--accent);
+    padding: 12px 16px;
+    border-radius: 0 10px 10px 0;
+    margin: 14px 0;
+    font-size: 13px;
+    color: #92400e;
+    font-weight: 500;
+    line-height: 1.7;
+  }
+
+  .terms-content .important-box {
+    background: linear-gradient(135deg, #fee2e2, #fecaca33);
+    border-left: 3px solid var(--danger);
+    padding: 12px 16px;
+    border-radius: 0 10px 10px 0;
+    margin: 14px 0;
+    font-size: 13px;
+    color: #991b1b;
+    font-weight: 500;
+    line-height: 1.7;
+  }
+
+  .terms-content ul {
+    padding-left: 20px;
+    margin: 8px 0 12px;
+  }
+
+  .terms-content ul li {
+    font-size: 13.5px;
+    color: #374151;
+    margin-bottom: 6px;
+    line-height: 1.65;
+  }
+
+  .terms-content ul li::marker {
+    color: var(--primary);
+  }
+
+  .terms-content .definition {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .terms-content .definition strong {
+    color: var(--primary);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  /* Progress indicator */
+  .progress-bar {
+    height: 3px;
+    background: var(--border-light);
+    border-radius: 2px;
+    margin-bottom: 20px;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--primary), var(--accent));
+    border-radius: 2px;
+    width: 0%;
+    transition: width 0.3s ease;
+  }
+
+  /* Checkboxes */
+  .checkbox-group {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 24px;
+    position: relative;
+    z-index: 2;
+  }
+
+  .checkbox-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px 16px;
+    background: var(--bg);
+    border: 1.5px solid var(--border);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    user-select: none;
+    /* Help WebView interpret taps as taps (avoid gesture conflicts). */
+    touch-action: manipulation;
+  }
+
+  .checkbox-item:hover {
+    border-color: var(--primary-light);
+    background: var(--primary-pale);
+  }
+
+  .checkbox-item.checked {
+    border-color: var(--primary);
+    background: var(--primary-pale);
+  }
+
+  .checkbox-item input[type="checkbox"] {
+    display: none;
+  }
+
+  .custom-check {
+    width: 22px;
+    height: 22px;
+    border: 2px solid var(--border);
+    border-radius: 7px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 1px;
+    transition: all 0.2s ease;
+    background: #fff;
+  }
+
+  .checkbox-item.checked .custom-check {
+    background: var(--primary);
+    border-color: var(--primary);
+  }
+
+  .custom-check svg {
+    width: 14px;
+    height: 14px;
+    color: #fff;
+    opacity: 0;
+    transform: scale(0.5);
+    transition: all 0.2s ease;
+  }
+
+  .checkbox-item.checked .custom-check svg {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  .checkbox-label {
+    font-size: 13.5px;
+    color: var(--text);
+    line-height: 1.5;
+  }
+
+  .checkbox-label .required {
+    color: var(--danger);
+    font-weight: 600;
+  }
+
+  /* Buttons */
+  .actions {
+    display: flex;
+    gap: 12px;
+  }
+
+  .btn {
+    flex: 1;
+    padding: 15px 24px;
+    border-radius: 12px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .btn-decline {
+    background: var(--bg);
+    color: var(--text-muted);
+    border: 1.5px solid var(--border);
+  }
+
+  .btn-decline:hover {
+    background: #fee2e2;
+    color: var(--danger);
+    border-color: #fca5a5;
+  }
+
+  .btn-accept {
+    background: var(--primary);
+    color: #fff;
+    box-shadow: 0 4px 14px rgba(26,77,46,0.3);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .btn-accept:not(:disabled):hover {
+    background: var(--primary-light);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(26,77,46,0.35);
+  }
+
+  .btn-accept:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+  }
+
+  .btn-accept svg, .btn-decline svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  /* Footer */
+  .footer {
+    padding: 16px 32px;
+    background: var(--bg);
+    border-top: 1px solid var(--border-light);
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-light);
+  }
+
+  .footer a {
+    color: var(--primary);
+    text-decoration: none;
+    font-weight: 500;
+  }
+
+  /* Success overlay */
+  .success-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    backdrop-filter: blur(8px);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    animation: fadeIn 0.3s ease;
+  }
+
+  .success-overlay.active { display: flex; }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  .success-card {
+    background: var(--surface);
+    border-radius: 20px;
+    padding: 48px 40px;
+    text-align: center;
+    max-width: 420px;
+    width: 90%;
+    box-shadow: var(--shadow-lg);
+    animation: popIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  @keyframes popIn {
+    from { opacity: 0; transform: scale(0.9) translateY(20px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+  }
+
+  .success-icon {
+    width: 72px;
+    height: 72px;
+    background: var(--primary-pale);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 20px;
+  }
+
+  .success-icon svg {
+    width: 36px;
+    height: 36px;
+    color: var(--primary);
+  }
+
+  .success-card h2 {
+    font-family: 'Playfair Display', serif;
+    font-size: 22px;
+    color: var(--text);
+    margin-bottom: 10px;
+  }
+
+  .success-card p {
+    color: var(--text-muted);
+    font-size: 14px;
+    margin-bottom: 28px;
+    line-height: 1.6;
+  }
+
+  .success-card .btn {
+    max-width: 220px;
+    margin: 0 auto;
+  }
+
+  /* Mobile */
+  @media (max-width: 640px) {
+    body { padding: 12px; }
+    .header { padding: 28px 20px 24px; }
+    .header h1 { font-size: 22px; }
+    .content { padding: 20px; }
+    .terms-scroll { height: 340px; padding: 18px; }
+    .actions { flex-direction: column-reverse; }
+    .footer { padding: 14px 20px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <!-- Header -->
+  <div class="header">
+    <div class="header-icon">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+      </svg>
+    </div>
+    <h1>Términos y Condiciones</h1>
+    <p>Lea detenidamente antes de continuar</p>
+    <span class="version-badge">Versión 1.1 — Febrero 2026</span>
+  </div>
+
+  <!-- Content -->
+  <div class="content">
+    <div class="scroll-hint">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3"/>
+      </svg>
+      Desplácese hacia abajo para leer todos los términos
+    </div>
+
+    <!-- Progress -->
+    <div class="progress-bar">
+      <div class="progress-fill" id="progressFill"></div>
+    </div>
+
+    <!-- Terms scroll area -->
+    <div class="terms-scroll" id="termsScroll">
+      <div class="terms-content">
+
+        <h2><span class="num">1</span> Objeto y Naturaleza de la Plataforma</h2>
+        <p>La presente aplicación (en adelante, <strong>"la Plataforma"</strong>) es una herramienta tecnológica de intermediación cuyo único propósito es <strong>facilitar el contacto y la conexión entre personas que requieren servicios</strong> (en adelante, <strong>"Clientes"</strong>) <strong>y profesionales o trabajadores independientes que ofrecen dichos servicios</strong> (en adelante, <strong>"Proveedores de Servicio"</strong>).</p>
+
+        <div class="highlight-box">
+          ⚡ La Plataforma actúa exclusivamente como un canal de enlace y comunicación. No interviene, supervisa, dirige ni controla la ejecución de los servicios contratados entre Clientes y Proveedores.
+        </div>
+
+        <p>Los servicios ofertados a través de la Plataforma incluyen, de manera enunciativa pero no limitativa: electricidad, plomería, servicios domésticos, pintura, carpintería, albañilería, jardinería, limpieza, mantenimiento general y cualquier otra actividad de naturaleza independiente.</p>
+
+        <h2><span class="num">2</span> Independencia de los Proveedores de Servicio</h2>
+        <p>Queda expresamente establecido y aceptado por todas las partes que:</p>
+        <ul>
+          <li>Los Proveedores de Servicio <strong>NO son empleados, agentes, representantes, franquiciados ni contratistas</strong> de la Plataforma ni de la empresa que la opera.</li>
+          <li>No existe entre la Plataforma y los Proveedores de Servicio ninguna relación laboral, de subordinación, de dependencia económica ni vínculo de empleo de ningún tipo.</li>
+          <li>Los Proveedores de Servicio ejercen sus actividades de forma <strong>autónoma, independiente y bajo su propia responsabilidad</strong>, determinando libremente sus horarios, métodos de trabajo, tarifas y condiciones de servicio.</li>
+          <li>La Plataforma no establece ni controla los precios, horarios, rutas, métodos, herramientas o procedimientos utilizados por los Proveedores de Servicio.</li>
+          <li>Los Proveedores de Servicio son responsables del cumplimiento de sus obligaciones fiscales, tributarias, de seguridad social y cualquier otra obligación legal aplicable conforme a la legislación vigente en su jurisdicción.</li>
+        </ul>
+
+        <div class="important-box">
+          🔴 IMPORTANTE: La Plataforma no ejerce poder de dirección, supervisión ni disciplinario sobre los Proveedores de Servicio. La relación entre estos y la Plataforma es estrictamente de naturaleza comercial y tecnológica.
+        </div>
+
+        <h2><span class="num">3</span> Ausencia de Garantía sobre los Trabajos Realizados</h2>
+        <p>La Plataforma <strong>NO garantiza, avala, certifica ni respalda de ninguna manera</strong> los trabajos, servicios, reparaciones, instalaciones o cualquier otra labor realizada por los Proveedores de Servicio. En consecuencia:</p>
+        <ul>
+          <li>La Plataforma <strong>no ofrece ningún tipo de garantía</strong>, expresa ni implícita, sobre la calidad, durabilidad, seguridad, idoneidad o resultado de los trabajos ejecutados por los Proveedores.</li>
+          <li>La Plataforma <strong>no se hace responsable</strong> por defectos, vicios ocultos, fallas, daños colaterales ni por el incumplimiento parcial o total de los servicios acordados entre el Cliente y el Proveedor.</li>
+          <li>La Plataforma no asume responsabilidad alguna por reparaciones posteriores, correcciones, retrabajos o costos adicionales que se deriven de un servicio deficiente o insatisfactorio.</li>
+          <li>Cualquier garantía sobre los trabajos realizados <strong>es responsabilidad exclusiva del Proveedor de Servicio</strong> y deberá ser acordada, negociada y documentada directamente entre el Cliente y el Proveedor antes, durante o después de la prestación del servicio.</li>
+        </ul>
+
+        <div class="important-box">
+          🔴 IMPORTANTE: Es responsabilidad del Cliente exigir al Proveedor de Servicio, de forma directa y particular, las garantías correspondientes sobre los trabajos o servicios contratados. La Plataforma recomienda encarecidamente que todo acuerdo de garantía sea documentado por escrito entre ambas partes.
+        </div>
+
+        <p>Se recomienda al Cliente, antes de contratar cualquier servicio:</p>
+        <ul>
+          <li>Solicitar al Proveedor un <strong>presupuesto detallado por escrito</strong> que incluya alcance, materiales, plazos y condiciones de garantía.</li>
+          <li>Exigir un <strong>comprobante o acuerdo de garantía</strong> que especifique la duración, cobertura y condiciones de la misma.</li>
+          <li>Verificar las credenciales, referencias y calificaciones del Proveedor dentro de la Plataforma.</li>
+          <li>Documentar con fotografías o videos el estado previo y posterior al servicio realizado.</li>
+          <li>Conservar todos los recibos, facturas y comunicaciones relacionadas con el servicio contratado.</li>
+        </ul>
+
+        <h2><span class="num">4</span> Relación entre Cliente y Proveedor</h2>
+        <p>La contratación de cualquier servicio a través de la Plataforma constituye un <strong>acuerdo directo y exclusivo entre el Cliente y el Proveedor de Servicio</strong>. En consecuencia:</p>
+        <ul>
+          <li>La negociación del precio, alcance, duración, condiciones y garantías del servicio es responsabilidad exclusiva de ambas partes.</li>
+          <li>La Plataforma no es parte del contrato de prestación de servicios que se establezca entre el Cliente y el Proveedor.</li>
+          <li>Cualquier disputa, desacuerdo o reclamación derivada de la prestación del servicio deberá ser resuelta directamente entre el Cliente y el Proveedor de Servicio.</li>
+          <li>La Plataforma podrá, a su discreción, facilitar mecanismos de mediación, sin que ello implique asunción de responsabilidad alguna.</li>
+        </ul>
+
+        <h2><span class="num">5</span> Limitación de Responsabilidad</h2>
+        <p>La Plataforma <strong>no será responsable</strong> bajo ninguna circunstancia por:</p>
+        <ul>
+          <li>La calidad, idoneidad, puntualidad o resultado de los servicios prestados por los Proveedores.</li>
+          <li>El cumplimiento o incumplimiento de las garantías ofrecidas por los Proveedores sobre sus trabajos.</li>
+          <li>Daños materiales, personales, directos, indirectos, incidentales o consecuentes que pudieran derivarse de la prestación o falta de prestación de un servicio.</li>
+          <li>Pérdidas económicas, lucro cesante o perjuicios de cualquier naturaleza relacionados con los servicios contratados.</li>
+          <li>Lesiones personales, daños a la propiedad o cualquier otro perjuicio derivado de la conducta, negligencia o acción de los Proveedores de Servicio o los Clientes.</li>
+          <li>El incumplimiento por parte de los Proveedores de las normativas legales, permisos, licencias o certificaciones requeridas para el ejercicio de su actividad.</li>
+          <li>La veracidad, exactitud o actualización de la información proporcionada por los Proveedores o los Clientes en sus perfiles.</li>
+          <li>Reclamaciones por trabajos defectuosos, incompletos o que no cumplan con las expectativas del Cliente, siendo estas reclamaciones responsabilidad exclusiva del Proveedor.</li>
+        </ul>
+
+        <h2><span class="num">6</span> Obligaciones de los Proveedores de Servicio</h2>
+        <p>Al registrarse en la Plataforma, cada Proveedor de Servicio declara y garantiza que:</p>
+        <ul>
+          <li>Posee las competencias, habilidades, experiencia y, cuando aplique, las licencias o permisos necesarios para ejercer los servicios que ofrece.</li>
+          <li>Cumple con todas las leyes, regulaciones y normativas aplicables a su actividad profesional.</li>
+          <li>Dispone de las herramientas, equipos y materiales necesarios para la ejecución de los servicios.</li>
+          <li>Mantiene una conducta profesional, ética y respetuosa en todo momento.</li>
+          <li>La información proporcionada en su perfil es veraz, completa y actualizada.</li>
+          <li>Cuenta con los seguros o coberturas que considere necesarios para su actividad (la Plataforma recomienda, mas no exige, que los Proveedores cuenten con seguro de responsabilidad civil).</li>
+        </ul>
+
+        <h2><span class="num">7</span> Obligaciones de los Clientes</h2>
+        <p>Al utilizar la Plataforma, cada Cliente acepta y se compromete a:</p>
+        <ul>
+          <li>Proporcionar información veraz y precisa sobre los servicios requeridos.</li>
+          <li>Facilitar las condiciones razonables para la ejecución del servicio contratado.</li>
+          <li>Realizar los pagos acordados de forma oportuna y conforme a lo pactado con el Proveedor.</li>
+          <li>Tratar al Proveedor de Servicio con respeto y dignidad.</li>
+          <li>Proporcionar acceso seguro a las áreas donde se ejecutará el servicio.</li>
+          <li>Verificar, según su criterio, las credenciales y calificaciones del Proveedor antes de contratar el servicio.</li>
+        </ul>
+
+        <h2><span class="num">8</span> Sistema de Valoraciones y Reseñas</h2>
+        <p>La Plataforma podrá implementar un sistema de calificaciones y reseñas donde los Clientes podrán evaluar a los Proveedores y viceversa. Dichas valoraciones representan opiniones subjetivas de los usuarios y no constituyen una garantía, aval ni recomendación por parte de la Plataforma. La Plataforma se reserva el derecho de moderar o eliminar contenido que considere inadecuado, falso o difamatorio.</p>
+
+        <h2><span class="num">9</span> Pagos y Comisiones</h2>
+        <p>La Plataforma podrá cobrar una comisión o tarifa de servicio por la intermediación realizada. Las condiciones de pago, comisiones y tarifas serán informadas de manera transparente antes de la confirmación de cualquier transacción. Los Proveedores de Servicio serán informados sobre las comisiones aplicables al momento de su registro y ante cualquier modificación de las mismas.</p>
+
+        <h2><span class="num">10</span> Protección de Datos Personales</h2>
+        <p>La Plataforma se compromete a tratar los datos personales de los usuarios conforme a la legislación vigente en materia de protección de datos. La información personal recopilada será utilizada exclusivamente para los fines de operación de la Plataforma y no será compartida con terceros sin el consentimiento previo del usuario, salvo requerimiento legal o judicial.</p>
+
+        <h2><span class="num">11</span> Propiedad Intelectual</h2>
+        <p>Todos los derechos de propiedad intelectual sobre la Plataforma, incluyendo su diseño, código fuente, logotipos, marcas y contenido original, son propiedad exclusiva de la empresa operadora. Se prohíbe la reproducción, distribución o modificación no autorizada de cualquier elemento de la Plataforma.</p>
+
+        <h2><span class="num">12</span> Suspensión y Terminación de Cuentas</h2>
+        <p>La Plataforma se reserva el derecho de suspender o cancelar la cuenta de cualquier usuario que:</p>
+        <ul>
+          <li>Incumpla los presentes Términos y Condiciones.</li>
+          <li>Proporcione información falsa o engañosa.</li>
+          <li>Utilice la Plataforma para fines ilícitos o fraudulentos.</li>
+          <li>Mantenga conductas inapropiadas, abusivas o que afecten a otros usuarios.</li>
+          <li>Intente eludir los mecanismos de la Plataforma para realizar transacciones fuera de ella.</li>
+        </ul>
+
+        <h2><span class="num">13</span> Indemnización</h2>
+        <p>Tanto los Clientes como los Proveedores de Servicio acuerdan indemnizar y mantener indemne a la Plataforma, sus directores, empleados y afiliados, de cualquier reclamación, demanda, daño, pérdida o gasto (incluidos honorarios legales) que surja directa o indirectamente del uso de la Plataforma o de la prestación/recepción de servicios coordinados a través de ella.</p>
+
+        <h2><span class="num">14</span> Resolución de Controversias</h2>
+        <p>Cualquier controversia que surja en relación con los presentes Términos será sometida, en primera instancia, a un procedimiento de mediación amistosa. En caso de no llegar a un acuerdo, las partes se someterán a la jurisdicción de los tribunales competentes del domicilio de la empresa operadora de la Plataforma, renunciando a cualquier otro fuero que pudiera corresponderles.</p>
+
+        <h2><span class="num">15</span> Modificaciones</h2>
+        <p>La Plataforma se reserva el derecho de modificar los presentes Términos y Condiciones en cualquier momento. Las modificaciones serán notificadas a los usuarios con una antelación mínima de quince (15) días naturales. El uso continuado de la Plataforma tras la entrada en vigor de las modificaciones constituirá la aceptación de las mismas.</p>
+
+        <h2><span class="num">16</span> Disposiciones Finales</h2>
+        <p>Si alguna disposición de estos Términos fuera declarada nula o inaplicable, las restantes disposiciones conservarán plena validez y efecto. La falta de ejercicio de cualquier derecho por parte de la Plataforma no constituirá renuncia al mismo.</p>
+        <p>Estos Términos y Condiciones constituyen el acuerdo completo entre las partes en relación con el uso de la Plataforma y sustituyen cualquier acuerdo previo, verbal o escrito, sobre la materia.</p>
+
+        <div class="highlight-box">
+          📋 Fecha de última actualización: Febrero 2026. Al aceptar estos términos, usted reconoce haberlos leído, comprendido y aceptado en su totalidad.
+        </div>
+      </div>
+    </div>
+
+    <!-- Checkboxes -->
+    <div class="checkbox-group">
+      <label class="checkbox-item" id="check1" onclick="toggleCheck(this)">
+        <input type="checkbox">
+        <span class="custom-check">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+          </svg>
+        </span>
+        <span class="checkbox-label">
+          <span class="required">*</span> He leído y acepto los <strong>Términos y Condiciones</strong> en su totalidad. Comprendo que la Plataforma actúa únicamente como intermediaria y que los Proveedores de Servicio <strong>no son empleados</strong> de la misma.
+        </span>
+      </label>
+
+      <label class="checkbox-item" id="check2" onclick="toggleCheck(this)">
+        <input type="checkbox">
+        <span class="custom-check">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+          </svg>
+        </span>
+        <span class="checkbox-label">
+          <span class="required">*</span> Acepto la <strong>Política de Privacidad</strong> y autorizo el tratamiento de mis datos personales conforme a la legislación vigente.
+        </span>
+      </label>
+
+      <label class="checkbox-item" id="check3" onclick="toggleCheck(this)">
+        <input type="checkbox">
+        <span class="custom-check">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+          </svg>
+        </span>
+        <span class="checkbox-label">
+          <span class="required">*</span> Comprendo que la Plataforma <strong>no garantiza ni es responsable</strong> por los trabajos realizados por los Proveedores, y que es mi responsabilidad <strong>exigir directamente al Proveedor</strong> las garantías correspondientes sobre los servicios contratados.
+        </span>
+      </label>
+    </div>
+
+    <!-- Actions -->
+    <div class="actions">
+      <button class="btn btn-decline" onclick="handleDecline()">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+        Rechazar
+      </button>
+      <button class="btn btn-accept" id="btnAccept" disabled onclick="handleAccept()">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+        </svg>
+        Aceptar Términos
+      </button>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    Para consultas: <a href="mailto:legal@serviconnect.app">legal@serviconnect.app</a> · Todos los derechos reservados © 2026
+  </div>
+</div>
+
+<!-- Success Overlay -->
+<div class="success-overlay" id="successOverlay">
+  <div class="success-card">
+    <div class="success-icon">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+      </svg>
+    </div>
+    <h2>¡Términos Aceptados!</h2>
+    <p>Ha aceptado exitosamente los Términos y Condiciones. Ya puede comenzar a utilizar la plataforma.</p>
+    <button class="btn btn-accept" onclick="document.getElementById('successOverlay').classList.remove('active')" style="max-width: 200px; margin: 0 auto;">
+      Continuar
+    </button>
+  </div>
+</div>
+
+<script>
+  // Scroll progress tracking
+  const termsScroll = document.getElementById('termsScroll');
+  const progressFill = document.getElementById('progressFill');
+
+  function updateProgress() {
+    if (!termsScroll || !progressFill) return;
+    const scrollTop = termsScroll.scrollTop;
+    const scrollHeight = termsScroll.scrollHeight;
+
+    // In WebView, scrollTop may never hit the absolute maximum due to rounding,
+    // so treat "near bottom" as fully read.
+    // Use the visible bottom position to better detect "end reached".
+    const visibleBottom = scrollTop + termsScroll.clientHeight;
+    let progress = scrollHeight <= 0 ? 100 : Math.min((visibleBottom / scrollHeight) * 100, 100);
+
+    // Be forgiving around rounding/sub-pixel rendering in WebView.
+    if (progress >= 98.5) progress = 100;
+    progressFill.style.width = progress + '%';
+  }
+
+  termsScroll.addEventListener('scroll', updateProgress, { passive: true });
+  termsScroll.addEventListener('touchend', updateProgress, { passive: true });
+  termsScroll.addEventListener('mouseup', updateProgress, { passive: true });
+  window.addEventListener('resize', updateProgress);
+  // Recompute after initial layout/fonts.
+  window.addEventListener('load', () => {
+    updateProgress();
+    requestAnimationFrame(updateProgress);
+    setTimeout(updateProgress, 300);
+  });
+
+  // Checkbox logic
+  let _lastToggleAt = 0;
+  function toggleCheck(el) {
+    // WebViews may fire both touch and click events; avoid double toggles.
+    const now = Date.now();
+    if (now - _lastToggleAt < 350) return;
+    _lastToggleAt = now;
+
+    el.classList.toggle('checked');
+    const cb = el.querySelector('input[type="checkbox"]');
+    cb.checked = !cb.checked;
+    updateAcceptButton();
+  }
+
+  // In some WebView/touch environments, inline `onclick` can be unreliable
+  // when the user is scrolling. Bind a touch handler as a fallback.
+  (function bindTouchFallback() {
+    document.querySelectorAll('.checkbox-item').forEach((el) => {
+      el.addEventListener(
+        'touchend',
+        (e) => {
+          // Don't allow the event to bubble into scroll handling.
+          e.preventDefault();
+          toggleCheck(el);
+        },
+        { passive: false }
+      );
+    });
+  })();
+
+  function updateAcceptButton() {
+    const allChecked = document.querySelectorAll('.checkbox-item.checked').length === 3;
+    document.getElementById('btnAccept').disabled = !allChecked;
+  }
+
+  // Actions
+  function handleAccept() {
+    if (document.getElementById('btnAccept').disabled) return;
+    // Prevent duplicate submissions if the user taps quickly.
+    document.getElementById('btnAccept').disabled = true;
+
+    // Capture acceptance data
+    const acceptanceData = {
+      timestamp: new Date().toISOString(),
+      termsVersion: '1.1',
+      checksAccepted: {
+        termsAndConditions: true,
+        privacyPolicy: true,
+        serviceDisclaimer: true
+      },
+      userAgent: navigator.userAgent
+    };
+
+    console.log('✅ Términos aceptados:', JSON.stringify(acceptanceData, null, 2));
+
+    // Inform the React Native layer that the user accepted the terms.
+    // The app will continue the registration only after this event.
+    if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+      window.ReactNativeWebView.postMessage(
+        JSON.stringify({ type: 'TERMS_ACCEPTED', acceptanceData })
+      );
+    }
+
+    // Show success
+    document.getElementById('successOverlay').classList.add('active');
+
+    // Here you would typically:
+    // 1. Send acceptanceData to your backend API
+    // 2. Store acceptance in user's profile
+    // 3. Navigate to the next screen
+    // Example: fetch('/api/accept-terms', { method: 'POST', body: JSON.stringify(acceptanceData) });
+  }
+
+  function handleDecline() {
+    if (confirm('Si rechaza los términos, no podrá utilizar la plataforma. ¿Está seguro de que desea rechazar?')) {
+      console.log('❌ Términos rechazados');
+      if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+        window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'TERMS_DECLINED' }));
+      }
+      // Navigate back or close
+      // window.history.back();
+      alert('Ha rechazado los Términos y Condiciones. Será redirigido a la pantalla de inicio.');
+    }
+  }
+</script>
+
+</body>
+</html>
