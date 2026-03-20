@@ -101,6 +101,11 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Serve terms and conditions (for mobile app WebView)
+app.get('/terms-and-conditions.html', (req, res) => {
+  res.sendFile(path.join(__dirname, 'terms-and-conditions.html'));
+});
+
 // ── Error Handler ───────────────────────────────────────────
 app.use(errorHandler);
 
